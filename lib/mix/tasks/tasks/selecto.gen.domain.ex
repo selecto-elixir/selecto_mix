@@ -6,15 +6,14 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   switches:
    --db get metadata from the DB instead of ecto
    --extender module #source a module to integrate into this domain
-   --join table:local_key:remote_key:extender
+   --extender_path where to put
    --umb_live app:module #same as below, for umbrella apps
-   --live module #create liveview module and component (require selecto_components)
+   --live # create liveview parts
    domain_module
    domain_lower
    liveview_module
    liveview_lower
    root
-   [joins]
 
 
 
