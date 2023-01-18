@@ -28,9 +28,10 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
     IO.puts( inspect( args ))
     app = Mix.Project.config() |> Keyword.fetch!(:app)
+    ### make uppercase app!?
     data = %{
       app: app,
-      domain_module_path: "lib/#{app}/test_domain.ex",
+      domain_module_path: "lib/#{app}/#{dom_lower}.ex",
       domain_module: "App.TestDomain",
       domain_expansion: "App.TestExpansion",
       liveview_module: "AppWeb.Live.TestLive.ex",
