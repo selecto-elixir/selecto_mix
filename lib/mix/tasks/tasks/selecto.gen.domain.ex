@@ -9,8 +9,13 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
    --join table:local_key:remote_key:extender
    --umb_live app:module #same as below, for umbrella apps
    --live module #create liveview module and component (require selecto_components)
-   source
-   module_name
+   domain_module
+   domain_lower
+   liveview_module
+   liveview_lower
+   root
+   [joins]
+
 
 
   """
@@ -20,9 +25,44 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     # calling our Hello.say() function from earlier
     IO.puts("HERE")
 
-    {_parsed, rest} = OptionParser.parse!(args)
+    {_parsed, [dom_mod, dom_lower, live_mod, live_lower, root | joins]} = OptionParser.parse!(args)
 
-    IO.inspect( rest )
+    IO.puts( inspect( args ))
+    app = Mix.Project.config() |> Keyword.fetch!(:app)
+    data = %{
+      app: app,
+      domain_module_path: "lib/#{app}/test_domain.ex",
+      domain_module: "App.TestDomain",
+      domain_expansion: "App.TestExpansion",
+      liveview_module: "AppWeb.Live.TestLive.ex",
+      liveview_module_path: "lib/#{app}_web/live/test_live.ex",
+      ### Root is the first table in the domain
+      root: "App.Cntx.Test",
+      joins: [],
+      args: args
+    }
+
+    create_files(data)
 
   end
+
+  def create_files(data) do
+
+  end
+
+  def files_to_generate(data) do
+    [
+      ### Domain goes in app.constructed.path
+      {:eex, "domain.ex", Path.join([])},
+      ### Liveview goes in app_web.live
+      {:eex, "liveview.ex", "path..."}
+    ]
+  end
+
+  #### Joins format - can recurse
+  ## assoc:(list,of,dependant,joins) ???
+  ## joins expansion format:
+  ## assoc.subassoc.subassoc
+
+
 end
