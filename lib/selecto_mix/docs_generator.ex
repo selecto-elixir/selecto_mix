@@ -2613,27 +2613,23 @@ end
 
 IO.puts("")
 
-# NULL checks
-IO.puts("Filtering for NULL values:")
+# Boolean field filtering
+IO.puts("Filtering by boolean field:")
 
 selecto
 |> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
 |> Selecto.filter([
-  {:updated_at, {:is_null, true}}
+  {:discontinued, {:eq, false}}
 ])
 |> Selecto.limit(3)
 |> Selecto.execute()
 |> case do
   {:ok, {rows, _columns, _aliases}} ->
-    if length(rows) > 0 do
-      IO.puts("  Found \#{length(rows)} records where updated_at is NULL")
-      
-      Enum.each(rows, fn row ->
-        IO.inspect(row, label: "  →")
-      end)
-    else
-      IO.puts("  No records found with NULL updated_at")
-    end
+    IO.puts("  Found \#{length(rows)} records where discontinued = false")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
     
   {:error, error} ->
     IO.puts("Error: \#{inspect(error)}")
@@ -2645,45 +2641,25 @@ end
   
   ~s"""
 # ============================================================================
-# Subfilter Examples (Filtering by Related Data)
+# Related Data Filtering Examples
 # ============================================================================
 
-IO.puts("\\n--- Subfilter Operations ---\\n")
+IO.puts("\\n--- Filtering by Related Data ---\\n")
 
-IO.puts("Subfilter - Filter by existence of related records:")
-IO.puts("  Note: Subfilter allows filtering based on related data without explicit joins")
+IO.puts("Filter where related #{target_table} exists:")
+IO.puts("  Note: You can filter by related data using join syntax")
 
-# Find #{domain} records that have related #{target_table}
+# Find #{domain} records that have a specific related #{target_table}
 selecto
 |> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
-|> Selecto.subfilter("#{target_table}", :exists)
+|> Selecto.filter([
+  {"#{target_table}.id", {:gt, 0}}
+])
 |> Selecto.limit(5)
 |> Selecto.execute()
 |> case do
   {:ok, {rows, _columns, _aliases}} ->
     IO.puts("  Found \#{length(rows)} records with related #{target_table}")
-    
-    Enum.each(rows, fn row ->
-      IO.inspect(row, label: "  →")
-    end)
-    
-  {:error, error} ->
-    IO.puts("Error: \#{inspect(error)}")
-end
-
-IO.puts("")
-
-# Count-based subfilter
-IO.puts("Subfilter - Filter by count of related records:")
-
-selecto
-|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
-|> Selecto.subfilter("#{target_table}", {:count, ">", 2})
-|> Selecto.limit(5)
-|> Selecto.execute()
-|> case do
-  {:ok, {rows, _columns, _aliases}} ->
-    IO.puts("  Found \#{length(rows)} records with more than 2 related #{target_table}")
     
     Enum.each(rows, fn row ->
       IO.inspect(row, label: "  →")
