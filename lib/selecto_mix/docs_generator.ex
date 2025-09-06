@@ -109,7 +109,8 @@ defmodule SelectoMix.DocsGenerator do
         table: source[:source_table] || "#{domain}",
         primary_key: source[:primary_key] || :id,
         fields: source[:fields] || get_default_fields(source[:fields]),
-        types: source[:columns] || get_default_types(source[:columns])
+        types: source[:columns] || get_default_types(source[:columns]),
+        associations: source[:associations] || %{}
       }
     else
       # Fall back to minimal defaults if domain module doesn't exist
@@ -117,7 +118,8 @@ defmodule SelectoMix.DocsGenerator do
         table: "#{domain}",
         primary_key: :id,
         fields: [:id],
-        types: %{id: :integer}
+        types: %{id: :integer},
+        associations: %{}
       }
     end
   end
@@ -157,14 +159,30 @@ defmodule SelectoMix.DocsGenerator do
     %{id: :integer}
   end
 
-  defp analyze_related_schemas(_domain) do
-    # Analyze related schemas and associations
-    %{}
+  defp analyze_related_schemas(domain) do
+    # Try to get actual domain configuration
+    domain_module = try_get_domain_module(domain)
+    
+    if domain_module && function_exported?(domain_module, :domain, 0) do
+      # Get actual configuration from the domain module
+      config = domain_module.domain()
+      config[:schemas] || %{}
+    else
+      %{}
+    end
   end
 
-  defp analyze_join_relationships(_domain) do
-    # Analyze join patterns and relationships
-    []
+  defp analyze_join_relationships(domain) do
+    # Try to get actual domain configuration
+    domain_module = try_get_domain_module(domain)
+    
+    if domain_module && function_exported?(domain_module, :domain, 0) do
+      # Get actual configuration from the domain module
+      config = domain_module.domain()
+      config[:joins] || %{}
+    else
+      %{}
+    end
   end
 
   defp detect_domain_patterns(_domain) do
@@ -715,6 +733,17 @@ defmodule SelectoMix.DocsGenerator do
     |> Selecto.select(#{inspect(main_fields)})
     |> Selecto.filter([{"category.name", {:like, "%Electronics%"}}])
     |> Selecto.execute()
+    
+    # Complex filtering across multiple joined tables
+    selecto
+    |> Selecto.select([#{inspect(string_field)}, :unit_price, "category.name", "supplier.country"])
+    |> Selecto.filter([
+      {"category.name", {:in, ["Beverages", "Dairy Products"]}},
+      {"supplier.country", {:eq, "USA"}},
+      {:unit_price, {:between, {10, 50}}}
+    ])
+    |> Selecto.order_by([{"category.name", :asc}, {#{inspect(string_field)}, :asc}])
+    |> Selecto.execute()
     ```
 
     ### Aggregating Related Data
@@ -727,6 +756,53 @@ defmodule SelectoMix.DocsGenerator do
       "category.name"
     ])
     |> Selecto.group_by([#{inspect(List.first(main_fields))}, "category.name"])
+    |> Selecto.execute()
+    ```
+
+    ## Pivot Operations
+
+    Pivot allows you to change the primary focus of your query, essentially "rotating" the data
+    to view it from a different perspective.
+
+    ### Basic Pivot
+    ```elixir
+    # Pivot from products to categories
+    selecto
+    |> Selecto.pivot("categories")
+    |> Selecto.select(["categories.category_name", {:field, {:count, "products.id"}, "product_count"}])
+    |> Selecto.group_by(["categories.category_name"])
+    |> Selecto.execute()
+    
+    # Pivot to suppliers with aggregation
+    selecto
+    |> Selecto.pivot("suppliers")
+    |> Selecto.select([
+      "suppliers.company_name",
+      "suppliers.country",
+      {:field, {:count, "products.id"}, "product_count"},
+      {:field, {:avg, "products.unit_price"}, "avg_price"}
+    ])
+    |> Selecto.group_by(["suppliers.company_name", "suppliers.country"])
+    |> Selecto.filter([{"suppliers.country", {:in, ["USA", "UK", "Germany"]}}])
+    |> Selecto.order_by([{:desc, "product_count"}])
+    |> Selecto.limit(10)
+    |> Selecto.execute()
+    ```
+
+    ### Complex Pivot with Multiple Joins
+    ```elixir
+    # Pivot to analyze data from category perspective
+    selecto
+    |> Selecto.pivot("categories")
+    |> Selecto.select([
+      "categories.category_name",
+      {:field, {:count, "products.id"}, "total_products"},
+      {:field, {:count_distinct, "products.supplier_id"}, "unique_suppliers"},
+      {:field, {:avg, "products.unit_price"}, "avg_price"},
+      {:field, {:sum, "order_details.quantity"}, "total_quantity_sold"}
+    ])
+    |> Selecto.group_by(["categories.category_name"])
+    |> Selecto.having([{{:field, {:count, "products.id"}, "total_products"}, {:gt, 5}}])
     |> Selecto.execute()
     ```
 
@@ -1988,6 +2064,19 @@ defmodule SelectoMix.DocsGenerator do
       if string_field, do: main ++ [string_field], else: main
     end
   end
+  
+  defp get_first_string_field_for_assoc(assoc_table) do
+    # Try to guess a reasonable field name for the associated table
+    # This is a simple heuristic - in real usage, we'd inspect the actual schema
+    case assoc_table do
+      table when table in ["category", "categories"] -> "category_name"
+      table when table in ["supplier", "suppliers"] -> "company_name"
+      table when table in ["customer", "customers"] -> "company_name"
+      table when table in ["order", "orders"] -> "order_date"
+      table when table in ["employee", "employees"] -> "first_name"
+      _ -> "name"  # Default fallback
+    end
+  end
 
   defp generate_field_list(fields, types) do
     Enum.map(fields, fn field ->
@@ -2096,6 +2185,7 @@ defmodule SelectoMix.DocsGenerator do
     string_field = find_field_by_type(fields, domain_info.source.types, :string) || :name
     date_field = find_field_by_type(fields, domain_info.source.types, [:date, :datetime, :naive_datetime]) || :inserted_at
     boolean_field = find_field_by_type(fields, domain_info.source.types, :boolean)
+    numeric_field = find_field_by_type(fields, domain_info.source.types, [:integer, :float, :decimal])
     
     # Pick 2-3 main fields for basic examples (prefer name fields)
     main_fields = pick_main_fields(fields, domain_info.source.types)
@@ -2271,21 +2361,136 @@ end
 # ============================================================================
 # Automatic Join Inference
 # ============================================================================
+#{if not Enum.empty?(domain_info.source.associations) do
+  # Get first association for examples
+  {assoc_name, assoc_info} = domain_info.source.associations |> Map.to_list() |> List.first()
+  assoc_table = to_string(assoc_info[:queryable] || assoc_name)
+"""
 
 IO.puts("\\n--- Automatic Join Inference ---\\n")
 
-# Note: These examples assume relationships exist in your domain
-# Adjust field names based on your actual schema
+IO.puts("Accessing related data through automatic joins:")
 
-IO.puts("Accessing related data (if relationships exist):")
-IO.puts("  Note: Joins are automatically inferred from field references")
-IO.puts("  Example: selecting 'category.name' automatically joins to category table")
+# Select fields from joined table
+IO.puts("\\nSelecting fields from related #{assoc_table} table:")
+selecto
+|> Selecto.select([
+  #{inspect(List.first(main_fields))},
+  #{inspect(string_field)},
+  "#{assoc_table}.id",
+  "#{assoc_table}.#{get_first_string_field_for_assoc(assoc_table)}"
+])
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, columns, _aliases}} ->
+    IO.puts("  Columns: \#{inspect(columns)}")
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
 
-# Example with automatic joins (adjust based on actual relationships)
-# selecto
-# |> Selecto.select([#{inspect(List.first(main_fields))}, "related_table.field_name"])
-# |> Selecto.limit(3)
-# |> Selecto.execute()
+IO.puts("")
+
+# Filter by joined table fields
+IO.puts("Filtering by related #{assoc_table} fields:")
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.filter([{"#{assoc_table}.id", {:gt, 0}}])
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records with associated #{assoc_table}")
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# Aggregate with joins
+IO.puts("Aggregating with joined data:")
+selecto
+|> Selecto.select([
+  "#{assoc_table}.id",
+  {:field, {:count, "id"}, "count"},
+  {:field, {:avg, #{inspect(numeric_field || "id")}}, "average"}
+])
+|> Selecto.group_by(["#{assoc_table}.id"])
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Top 5 #{assoc_table} by count:")
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+"""
+else
+"""
+
+IO.puts("\\n--- Automatic Join Inference ---\\n")
+
+IO.puts("No associations found in this domain.")
+IO.puts("Joins are automatically inferred when you reference fields with dot notation.")
+IO.puts("Example: selecting 'category.name' automatically joins to category table")
+"""
+end}
+
+# ============================================================================  
+# Pivot Examples
+# ============================================================================
+#{if Map.size(domain_info.joins) > 0 do
+"""
+
+IO.puts("\\n--- Pivot Operations ---\\n")
+
+IO.puts("Pivoting to a related domain:")
+IO.puts("  Note: Pivot allows you to change the primary focus of your query")
+
+# Example pivot operation
+#{if Map.size(domain_info.source.associations) > 0 do
+  {assoc_name, assoc_info} = domain_info.source.associations |> Map.to_list() |> List.first()
+  target_table = to_string(assoc_info[:queryable] || assoc_name)
+"""
+# Pivot from #{domain} to #{target_table}
+# This changes the primary table from #{domain} to #{target_table}
+selecto
+|> Selecto.pivot(#{inspect(assoc_name)})
+|> Selecto.select(["#{target_table}.id", "#{target_table}.#{get_first_string_field_for_assoc(target_table)}"])
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Showing #{target_table} records after pivot:")
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# Pivot preserves the context of your original filters
+IO.puts("Note: Pivot maintains the relationship context from the original table.")
+IO.puts("The query above shows all #{target_table} records that have associated #{domain} records.")
+"""
+else
+  "# No associations available for pivot example"
+end}
+"""
+else
+  ""
+end}
 
 # ============================================================================
 # Pagination Examples
