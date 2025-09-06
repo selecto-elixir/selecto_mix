@@ -127,7 +127,9 @@ defmodule SelectoMix.DocsGenerator do
   defp try_get_domain_module(domain) do
     # Try to find the domain module
     # First try SelectoNorthwind.SelectoDomains.{Domain}Domain
-    module_name = "Elixir.SelectoNorthwind.SelectoDomains.#{String.capitalize(domain)}Domain"
+    # Convert atom to string if needed
+    domain_string = to_string(domain)
+    module_name = "Elixir.SelectoNorthwind.SelectoDomains.#{String.capitalize(domain_string)}Domain"
     
     case Code.ensure_compiled(String.to_atom(module_name)) do
       {:module, module} -> module
@@ -2178,6 +2180,10 @@ defmodule SelectoMix.DocsGenerator do
   # Executable .exs file generation
   
   defp generate_executable_examples(domain, domain_info, _opts) do
+    # Convert domain atom to string for String operations
+    domain_string = to_string(domain)
+    domain_capitalized = String.capitalize(domain_string)
+    
     # Get actual fields from domain_info
     fields = domain_info.source.fields
     
@@ -2191,17 +2197,17 @@ defmodule SelectoMix.DocsGenerator do
     main_fields = pick_main_fields(fields, domain_info.source.types)
     
     """
-# #{String.capitalize(domain)} Domain Examples
+# #{domain_capitalized} Domain Examples
 # 
 # This is an executable script demonstrating Selecto usage with the #{domain} domain.
 # Run with: mix run docs/selecto/#{domain}_examples.exs
 # Or in IEx: c "docs/selecto/#{domain}_examples.exs"
 
 # Setup and configuration
-IO.puts("\\n==== #{String.capitalize(domain)} Domain Examples ====\\n")
+IO.puts("\\n==== #{domain_capitalized} Domain Examples ====\\n")
 IO.puts("Setting up domain configuration...")
 
-domain = SelectoNorthwind.SelectoDomains.#{String.capitalize(domain)}Domain.domain()
+domain = SelectoNorthwind.SelectoDomains.#{domain_capitalized}Domain.domain()
 selecto = Selecto.configure(domain, SelectoNorthwind.Repo)
 
 IO.puts("✓ Configuration complete\\n")
@@ -2448,7 +2454,7 @@ end}
 # ============================================================================  
 # Pivot Examples
 # ============================================================================
-#{if Map.size(domain_info.joins) > 0 do
+#{if map_size(domain_info.joins) > 0 do
 """
 
 IO.puts("\\n--- Pivot Operations ---\\n")
@@ -2457,7 +2463,7 @@ IO.puts("Pivoting to a related domain:")
 IO.puts("  Note: Pivot allows you to change the primary focus of your query")
 
 # Example pivot operation
-#{if Map.size(domain_info.source.associations) > 0 do
+#{if map_size(domain_info.source.associations) > 0 do
   {assoc_name, assoc_info} = domain_info.source.associations |> Map.to_list() |> List.first()
   target_table = to_string(assoc_info[:queryable] || assoc_name)
 """
@@ -2488,6 +2494,205 @@ else
   "# No associations available for pivot example"
 end}
 """
+else
+  ""
+end}
+
+# ============================================================================
+# Subselect Examples (Aggregating Related Data)
+# ============================================================================
+#{if map_size(domain_info.source.associations) > 0 do
+  {assoc_name, assoc_info} = domain_info.source.associations |> Map.to_list() |> List.first()
+  target_table = to_string(assoc_info[:queryable] || assoc_name)
+  target_field = get_first_string_field_for_assoc(target_table)
+  
+  ~s"""
+
+IO.puts("\\n--- Subselect Operations ---\\n")
+
+IO.puts("Subselect - Getting related data as JSON array:")
+IO.puts("  Note: Subselect returns related records as aggregated data within each row")
+
+# Get #{domain} records with related #{target_table} as JSON array
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.subselect(["#{target_table}.#{target_field}"], format: :json_agg)
+|> Selecto.limit(3)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, columns, _aliases}} ->
+    IO.puts("  Columns: \#{inspect(columns)}")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# Count of related records
+IO.puts("Subselect - Count of related records:")
+
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.subselect(["#{target_table}.id"], format: :count)
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records with counts")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+  """
+else
+  ""
+end}
+
+# ============================================================================
+# Advanced Filtering Examples
+# ============================================================================
+
+IO.puts("\\n--- Advanced Filtering ---\\n")
+
+# OR conditions
+IO.puts("Using OR conditions in filters:")
+
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.filter([
+  {:or, [
+    {#{inspect(string_field)}, {:like, "%a%"}},
+    {#{inspect(string_field)}, {:like, "%e%"}}
+  ]}
+])
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records matching 'a' OR 'e'")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# IN clause
+IO.puts("Using IN clause for multiple values:")
+
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.filter([
+  {#{inspect(List.first(main_fields))}, {:in, [1, 2, 3, 5, 8]}}
+])
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records with ID in [1, 2, 3, 5, 8]")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# NULL checks
+IO.puts("Filtering for NULL values:")
+
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.filter([
+  {:updated_at, {:is_null, true}}
+])
+|> Selecto.limit(3)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    if length(rows) > 0 do
+      IO.puts("  Found \#{length(rows)} records where updated_at is NULL")
+      
+      Enum.each(rows, fn row ->
+        IO.inspect(row, label: "  →")
+      end)
+    else
+      IO.puts("  No records found with NULL updated_at")
+    end
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+#{if map_size(domain_info.source.associations) > 0 do
+  {assoc_name, assoc_info} = domain_info.source.associations |> Map.to_list() |> List.first()
+  target_table = to_string(assoc_info[:queryable] || assoc_name)
+  
+  ~s"""
+# ============================================================================
+# Subfilter Examples (Filtering by Related Data)
+# ============================================================================
+
+IO.puts("\\n--- Subfilter Operations ---\\n")
+
+IO.puts("Subfilter - Filter by existence of related records:")
+IO.puts("  Note: Subfilter allows filtering based on related data without explicit joins")
+
+# Find #{domain} records that have related #{target_table}
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.subfilter("#{target_table}", :exists)
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records with related #{target_table}")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+
+IO.puts("")
+
+# Count-based subfilter
+IO.puts("Subfilter - Filter by count of related records:")
+
+selecto
+|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+|> Selecto.subfilter("#{target_table}", {:count, ">", 2})
+|> Selecto.limit(5)
+|> Selecto.execute()
+|> case do
+  {:ok, {rows, _columns, _aliases}} ->
+    IO.puts("  Found \#{length(rows)} records with more than 2 related #{target_table}")
+    
+    Enum.each(rows, fn row ->
+      IO.inspect(row, label: "  →")
+    end)
+    
+  {:error, error} ->
+    IO.puts("Error: \#{inspect(error)}")
+end
+  """
 else
   ""
 end}
