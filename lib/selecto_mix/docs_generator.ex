@@ -619,7 +619,7 @@ defmodule SelectoMix.DocsGenerator do
     
     # Pick appropriate fields for examples based on type
     string_field = find_field_by_type(fields, domain_info.source.types, :string) || :name
-    numeric_field = find_field_by_type(fields, domain_info.source.types, [:integer, :decimal]) || :id
+    _numeric_field = find_field_by_type(fields, domain_info.source.types, [:integer, :decimal]) || :id
     date_field = find_field_by_type(fields, domain_info.source.types, [:date, :datetime, :naive_datetime]) || :inserted_at
     boolean_field = find_field_by_type(fields, domain_info.source.types, :boolean)
     
@@ -679,12 +679,12 @@ defmodule SelectoMix.DocsGenerator do
     |> Selecto.execute()
     #{if boolean_field do """
 
-    # Boolean field filtering
-    selecto
-    |> Selecto.select(#{inspect(main_fields)})
-    |> Selecto.filter([{#{inspect(boolean_field)}, {:eq, true}}])
-    |> Selecto.execute()
-    """ else "" end}
+      # Boolean field filtering
+      selecto
+      |> Selecto.select(#{inspect(main_fields)})
+      |> Selecto.filter([{#{inspect(boolean_field)}, {:eq, true}}])
+      |> Selecto.execute()
+      """ else "" end}
     ```
 
     ## Aggregation Examples
@@ -2297,25 +2297,25 @@ selecto
 end
 #{if boolean_field do """
 
-IO.puts("")
+  IO.puts("")
 
-# Boolean field filtering
-IO.puts("Filtering by boolean field (#{inspect(boolean_field)}):")
-selecto
-|> Selecto.select(#{inspect(main_fields)})
-|> Selecto.filter([{#{inspect(boolean_field)}, {:eq, true}}])
-|> Selecto.limit(3)
-|> Selecto.execute()
-|> case do
-  {:ok, {rows, _columns, _aliases}} ->
-    IO.puts("  Found \#{length(rows)} records where #{boolean_field} = true")
-    Enum.each(rows, fn row ->
-      IO.inspect(row, label: "  →")
-    end)
-  {:error, error} ->
-    IO.puts("Error: \#{inspect(error)}")
-end
-""" else "" end}
+  # Boolean field filtering
+  IO.puts("Filtering by boolean field (#{inspect(boolean_field)}):")
+  selecto
+  |> Selecto.select(#{inspect(main_fields)})
+  |> Selecto.filter([{#{inspect(boolean_field)}, {:eq, true}}])
+  |> Selecto.limit(3)
+  |> Selecto.execute()
+  |> case do
+    {:ok, {rows, _columns, _aliases}} ->
+      IO.puts("  Found \#{length(rows)} records where #{boolean_field} = true")
+      Enum.each(rows, fn row ->
+        IO.inspect(row, label: "  →")
+      end)
+    {:error, error} ->
+      IO.puts("Error: \#{inspect(error)}")
+  end
+  """ else "" end}
 
 # ============================================================================
 # Aggregation Examples
@@ -2507,15 +2507,15 @@ end}
   target_field = get_first_string_field_for_assoc(target_table)
   
   ~s"""
+  
+  IO.puts("\\n--- Subselect Operations ---\\n")
+  
+  IO.puts("Subselect - Getting related data as JSON array:")
+  IO.puts("  Note: Subselect returns related records as aggregated data within each row")
 
-IO.puts("\\n--- Subselect Operations ---\\n")
-
-IO.puts("Subselect - Getting related data as JSON array:")
-IO.puts("  Note: Subselect returns related records as aggregated data within each row")
-
-# Get #{domain} records with related #{target_table} as JSON array
-selecto
-|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+  # Get #{domain} records with related #{target_table} as JSON array
+  selecto
+  |> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
 |> Selecto.subselect(["#{target_table}.#{target_field}"], format: :json_agg)
 |> Selecto.limit(3)
 |> Selecto.execute()
@@ -2640,35 +2640,35 @@ end
   target_table = to_string(assoc_info[:queryable] || assoc_name)
   
   ~s"""
-# ============================================================================
-# Related Data Filtering Examples
-# ============================================================================
-
-IO.puts("\\n--- Filtering by Related Data ---\\n")
-
-IO.puts("Filter where related #{target_table} exists:")
-IO.puts("  Note: You can filter by related data using join syntax")
-
-# Find #{domain} records that have a specific related #{target_table}
-selecto
-|> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
-|> Selecto.filter([
-  {"#{target_table}.id", {:gt, 0}}
-])
-|> Selecto.limit(5)
-|> Selecto.execute()
-|> case do
-  {:ok, {rows, _columns, _aliases}} ->
-    IO.puts("  Found \#{length(rows)} records with related #{target_table}")
+    # ============================================================================
+    # Related Data Filtering Examples
+    # ============================================================================
     
-    Enum.each(rows, fn row ->
-      IO.inspect(row, label: "  →")
-    end)
-    
-  {:error, error} ->
-    IO.puts("Error: \#{inspect(error)}")
-end
-  """
+    IO.puts("\\n--- Filtering by Related Data ---\\n")
+
+    IO.puts("Filter where related #{target_table} exists:")
+    IO.puts("  Note: You can filter by related data using join syntax")
+
+  # Find #{domain} records that have a specific related #{target_table}
+  selecto
+  |> Selecto.select([#{inspect(List.first(main_fields))}, #{inspect(string_field)}])
+  |> Selecto.filter([
+    {"#{target_table}.id", {:gt, 0}}
+  ])
+  |> Selecto.limit(5)
+  |> Selecto.execute()
+  |> case do
+    {:ok, {rows, _columns, _aliases}} ->
+      IO.puts("  Found \#{length(rows)} records with related #{target_table}")
+      
+      Enum.each(rows, fn row ->
+        IO.inspect(row, label: "  →")
+      end)
+      
+    {:error, error} ->
+      IO.puts("Error: \#{inspect(error)}")
+  end
+    """
 else
   ""
 end}
