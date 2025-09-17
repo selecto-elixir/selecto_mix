@@ -693,7 +693,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     route_suggestion = """
 
     Add this route to your router.ex:
-      live "/#{schema_underscore}", #{live_module}, :index
+      live "/#{schema_underscore}", #{schema_name}Live, :index
     """
 
     Igniter.add_notice(igniter, route_suggestion)
