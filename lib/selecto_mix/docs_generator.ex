@@ -7,14 +7,28 @@ defmodule SelectoMix.DocsGenerator do
 
   @doc """
   Generate domain overview documentation.
+
+  Options:
+    - :app_module - The application module name (default: "MyApp")
+    - :web_module - The web module name (default: "MyAppWeb")
+    - :repo_module - The repo module name (default: "MyApp.Repo")
   """
-  def generate_overview(domain, format \\ :markdown) do
+  def generate_overview(domain, format \\ :markdown, opts \\ []) do
     domain_info = analyze_domain(domain)
-    
+    config = build_config(opts)
+
     case format do
-      :markdown -> generate_markdown_overview(domain, domain_info)
-      :html -> generate_html_overview(domain, domain_info)
+      :markdown -> generate_markdown_overview(domain, domain_info, config)
+      :html -> generate_html_overview(domain, domain_info, config)
     end
+  end
+
+  defp build_config(opts) do
+    %{
+      app_module: Keyword.get(opts, :app_module, "MyApp"),
+      web_module: Keyword.get(opts, :web_module, "MyAppWeb"),
+      repo_module: Keyword.get(opts, :repo_module, "MyApp.Repo")
+    }
   end
 
   @doc """
