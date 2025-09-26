@@ -276,7 +276,7 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
         String.replace(
           content_with_alpine,
           ~r/(import {LiveSocket} from "phoenix_live_view")/,
-          "\\1\nimport {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\""
+          "\\1\nimport {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\nimport selectoHooks from \"../../vendor/selecto_components/assets/js/hooks\""
         )
         
       String.contains?(content_with_alpine, "import") ->
@@ -289,16 +289,16 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
           String.replace(
             content_with_alpine,
             last_import,
-            last_import <> "\nimport {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\""
+            last_import <> "\nimport {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\nimport selectoHooks from \"../../vendor/selecto_components/assets/js/hooks\""
           )
         else
           # Add at the beginning
-          "import {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\n" <> content_with_alpine
+          "import {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\nimport selectoHooks from \"../../vendor/selecto_components/assets/js/hooks\"\n" <> content_with_alpine
         end
         
       true ->
         # Add at the beginning
-        "import {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\n" <> content_with_alpine
+        "import {hooks as selectoComponentsHooks} from \"phoenix-colocated/selecto_components\"\nimport selectoHooks from \"../../vendor/selecto_components/assets/js/hooks\"\n" <> content_with_alpine
     end
   end
   
@@ -377,7 +377,7 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
   defp add_hooks_to_livesocket(content) do
     cond do
       # Check if selectoComponentsHooks is actually IN the hooks object, not just imported
-      String.contains?(content, "hooks:") && String.contains?(content, "...selectoComponentsHooks") ->
+      String.contains?(content, "hooks:") && String.contains?(content, "...selectoComponentsHooks") && String.contains?(content, "...selectoHooks") ->
         # Already configured
         content
         
@@ -387,7 +387,7 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
         String.replace(
           content,
           ~r/hooks:\s*{\s*([^}]+)}/,
-          "hooks: {\\1, ...selectoComponentsHooks}"
+          "hooks: {\\1, ...selectoComponentsHooks, ...selectoHooks}"
         )
         
       String.contains?(content, "hooks:") ->
@@ -395,7 +395,7 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
         String.replace(
           content,
           ~r/hooks:\s*{([^}]*)}/,
-          "hooks: {...selectoComponentsHooks,\\1}"
+          "hooks: {...selectoComponentsHooks, ...selectoHooks,\\1}"
         )
         
       String.contains?(content, "new LiveSocket") ->
@@ -403,7 +403,7 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
         String.replace(
           content,
           ~r/(const liveSocket = new LiveSocket\([^,]+,\s*Socket,\s*{)([^}]*)(})/,
-          "\\1\\2,\n  hooks: { ...selectoComponentsHooks }\\3"
+          "\\1\\2,\n  hooks: { ...selectoComponentsHooks, ...selectoHooks }\\3"
         )
         
       true ->
@@ -489,9 +489,10 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
       
       1. In assets/js/app.js, add:
          import {hooks as selectoComponentsHooks} from "phoenix-colocated/selecto_components"
-         
+         import selectoHooks from "../../vendor/selecto_components/assets/js/hooks"
+
          // In your LiveSocket configuration:
-         hooks: { ...selectoComponentsHooks }
+         hooks: { ...selectoComponentsHooks, ...selectoHooks }
       
       2. In assets/css/app.css, add:
          @source "#{get_selecto_components_path()}";
