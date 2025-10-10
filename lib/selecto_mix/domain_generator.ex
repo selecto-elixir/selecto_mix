@@ -208,29 +208,33 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   # Generate columns config with special join mode handling
-  defp generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, assoc_config) do
+  defp generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, _assoc_config) do
     case join_mode do
       {mode_type, display_field} when mode_type in [:tag, :star, :lookup] ->
         display_field_atom = String.to_atom(display_field)
 
-        # Create columns for ID and display field with special metadata
-        columns_map = %{
-          display_field_atom => %{
-            type: Map.get(field_types, display_field_atom, :string),
+        # Start with ALL fields to satisfy validator
+        columns_map = Enum.into(fields, %{}, fn field ->
+          type = Map.get(field_types, field, :string)
+          {field, %{type: type}}
+        end)
+
+        # Enhance the display field with special metadata
+        columns_map = Map.update!(columns_map, display_field_atom, fn col ->
+          Map.merge(col, %{
             join_mode: mode_type,
             id_field: primary_key,
             display_field: display_field_atom,
             prevent_denormalization: true,
             filter_type: :multi_select_id
-          }
-        }
-
-        # Add ID field if not already included
-        columns_map = if display_field_atom != primary_key do
-          Map.put(columns_map, primary_key, %{
-            type: Map.get(field_types, primary_key, :integer),
-            hidden: true  # Hide ID column in UI by default
           })
+        end)
+
+        # Mark ID field as hidden if it's not the display field
+        columns_map = if display_field_atom != primary_key && Map.has_key?(columns_map, primary_key) do
+          Map.update!(columns_map, primary_key, fn col ->
+            Map.put(col, :hidden, true)
+          end)
         else
           columns_map
         end
