@@ -208,7 +208,7 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   # Generate columns config with special join mode handling
-  defp generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, _assoc_config) do
+  defp generate_columns_config_with_mode(fields, field_types, join_mode, primary_key, assoc_config) do
     case join_mode do
       {mode_type, display_field} when mode_type in [:tag, :star, :lookup] ->
         display_field_atom = String.to_atom(display_field)
@@ -219,15 +219,32 @@ defmodule SelectoMix.DomainGenerator do
           {field, %{type: type}}
         end)
 
+        # Extract the foreign key field from association config
+        # This allows filtering on the local foreign key instead of joining
+        foreign_key_field = case assoc_config do
+          %{owner_key: owner_key} -> Atom.to_string(owner_key)
+          _ -> nil
+        end
+
+        # Build metadata map for the display field
+        metadata = %{
+          join_mode: mode_type,
+          id_field: primary_key,
+          display_field: display_field_atom,
+          prevent_denormalization: true,
+          filter_type: :multi_select_id
+        }
+
+        # Add group_by_filter if we have a foreign key to filter on
+        metadata = if foreign_key_field do
+          Map.put(metadata, :group_by_filter, foreign_key_field)
+        else
+          metadata
+        end
+
         # Enhance the display field with special metadata
         columns_map = Map.update!(columns_map, display_field_atom, fn col ->
-          Map.merge(col, %{
-            join_mode: mode_type,
-            id_field: primary_key,
-            display_field: display_field_atom,
-            prevent_denormalization: true,
-            filter_type: :multi_select_id
-          })
+          Map.merge(col, metadata)
         end)
 
         # Mark ID field as hidden if it's not the display field
