@@ -191,14 +191,34 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   defp generate_columns_config(fields, field_types) do
+    # Detect polymorphic associations
+    polymorphic_assocs = detect_polymorphic_associations(fields, field_types)
+
     columns_map = Enum.into(fields, %{}, fn field ->
       type = Map.get(field_types, field, :string)
       {field, %{type: type}}
     end)
 
+    # Add polymorphic virtual column for each detected polymorphic association
+    polymorphic_columns = Enum.into(polymorphic_assocs, %{}, fn assoc ->
+      virtual_field = String.to_atom(assoc.base_name)
+      {virtual_field, %{
+        type: :string,
+        join_mode: :polymorphic,
+        filter_type: :polymorphic,
+        type_field: to_string(assoc.type_field),
+        id_field: to_string(assoc.id_field),
+        entity_types: assoc.suggested_types,
+        display_name: assoc.base_name |> String.capitalize()
+      }}
+    end)
+
+    # Merge regular columns with polymorphic virtual columns
+    all_columns = Map.merge(columns_map, polymorphic_columns)
+
     # Format the map with nice indentation
     formatted_columns =
-      columns_map
+      all_columns
       |> Enum.map(fn {field, type_map} ->
         "          #{inspect(field)} => #{inspect(type_map)}"
       end)
@@ -506,6 +526,50 @@ defmodule SelectoMix.DomainGenerator do
   defp simplify_ecto_type(:utc_datetime), do: :utc_datetime
   defp simplify_ecto_type(type) when is_atom(type), do: type
   defp simplify_ecto_type(_), do: :string
+
+  # Detect polymorphic associations in a schema.
+  #
+  # Looks for patterns like:
+  # - commentable_type + commentable_id
+  # - taggable_type + taggable_id
+  # - attachable_type + attachable_id
+  #
+  # Returns a list of polymorphic associations:
+  # [
+  #   %{
+  #     base_name: "commentable",
+  #     type_field: :commentable_type,
+  #     id_field: :commentable_id,
+  #     suggested_types: ["Product", "Order", "Customer"]  # From seed data or manual
+  #   }
+  # ]
+  defp detect_polymorphic_associations(fields, _field_types) do
+    # Find all fields ending in _type
+    type_fields = Enum.filter(fields, fn field ->
+      field_str = to_string(field)
+      String.ends_with?(field_str, "_type")
+    end)
+
+    # For each type field, check if corresponding _id field exists
+    Enum.flat_map(type_fields, fn type_field ->
+      type_field_str = to_string(type_field)
+      base_name = String.replace_suffix(type_field_str, "_type", "")
+      id_field = String.to_atom(base_name <> "_id")
+
+      if id_field in fields do
+        # Found a polymorphic pair!
+        [%{
+          base_name: base_name,
+          type_field: type_field,
+          id_field: id_field,
+          # Default suggested types - can be overridden by --expand-polymorphic option
+          suggested_types: ["Product", "Order", "Customer"]
+        }]
+      else
+        []
+      end
+    end)
+  end
   
   # defp discover_basic_associations(schema_module) do
   #   try do
