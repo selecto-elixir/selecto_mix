@@ -174,6 +174,7 @@ defmodule SelectoMix.DomainGenerator do
     fields = config[:fields] || []
     redacted_fields = config[:redacted_fields] || []
     field_types = config[:field_types] || %{}
+    polymorphic_config = config[:polymorphic_config]
     
     redacted_line = if redacted_fields != [], do: "\n        redact_fields: #{inspect(redacted_fields)},", else: ""
     
@@ -185,14 +186,20 @@ defmodule SelectoMix.DomainGenerator do
     "        # Fields to exclude from queries#{redacted_line}\n" <>
     "        redact_fields: [],\n        \n" <>
     "        # Field type definitions (contains the same info as fields above)\n" <>
-    "        columns: #{generate_columns_config(fields, field_types)},\n        \n" <>
+    "        columns: #{generate_columns_config(fields, field_types, polymorphic_config)},\n        \n" <>
     "        # Schema associations\n" <>
     "        associations: #{generate_source_associations(config)}\n      }"
   end
 
-  defp generate_columns_config(fields, field_types) do
-    # Detect polymorphic associations
-    polymorphic_assocs = detect_polymorphic_associations(fields, field_types)
+  defp generate_columns_config(fields, field_types, polymorphic_config \\ nil) do
+    # Detect polymorphic associations (auto-detect OR use provided config)
+    polymorphic_assocs = if polymorphic_config do
+      # Use provided config from --expand-polymorphic
+      [polymorphic_config]
+    else
+      # Auto-detect from field patterns
+      detect_polymorphic_associations(fields, field_types)
+    end
 
     columns_map = Enum.into(fields, %{}, fn field ->
       type = Map.get(field_types, field, :string)
@@ -201,15 +208,25 @@ defmodule SelectoMix.DomainGenerator do
 
     # Add polymorphic virtual column for each detected polymorphic association
     polymorphic_columns = Enum.into(polymorphic_assocs, %{}, fn assoc ->
-      virtual_field = String.to_atom(assoc.base_name)
+      # Handle both auto-detected format and CLI-provided format
+      {virtual_field, type_field, id_field, entity_types, display_name} = case assoc do
+        # CLI-provided format from --expand-polymorphic
+        %{field_name: field_name, type_field: tf, id_field: idf, entity_types: types} ->
+          {String.to_atom(field_name), tf, idf, types, String.capitalize(field_name)}
+
+        # Auto-detected format
+        %{base_name: base, type_field: tf, id_field: idf, suggested_types: types} ->
+          {String.to_atom(base), to_string(tf), to_string(idf), types, String.capitalize(base)}
+      end
+
       {virtual_field, %{
         type: :string,
         join_mode: :polymorphic,
         filter_type: :polymorphic,
-        type_field: to_string(assoc.type_field),
-        id_field: to_string(assoc.id_field),
-        entity_types: assoc.suggested_types,
-        display_name: assoc.base_name |> String.capitalize()
+        type_field: type_field,
+        id_field: id_field,
+        entity_types: entity_types,
+        display_name: display_name
       }}
     end)
 
