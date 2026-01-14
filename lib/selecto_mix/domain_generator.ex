@@ -358,28 +358,68 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_assocs =
         associations
-        |> Enum.reject(fn {_name, assoc} -> assoc[:is_through] end)  # Skip through associations for now
         |> Enum.map(fn {assoc_name, assoc_config} ->
-          # Note: Custom markers disabled due to Sourceror parsing issues
-          # _custom_marker = if assoc_config[:is_custom], do: " # CUSTOM", else: ""
-          # Ensure all values are properly inspected for valid Elixir syntax
-          queryable_name = get_queryable_name(assoc_config) |> inspect()
-          owner_key = assoc_config[:owner_key] |> inspect()
-          related_key = assoc_config[:related_key] |> inspect()
-          # Use proper atom syntax for map key
-          assoc_name_key = assoc_name |> inspect()
-
-          "#{assoc_name_key} => %{\n" <>
-          "              queryable: #{queryable_name},\n" <>
-          "              field: #{inspect(assoc_name)},\n" <>
-          "              owner_key: #{owner_key},\n" <>
-          "              related_key: #{related_key}\n" <>
-          "            }"
+          format_association_config(assoc_name, assoc_config)
         end)
         |> Enum.join(",\n        ")
 
       "%{\n        #{formatted_assocs}\n        }"
     end
+  end
+
+  # Format a single association configuration for source.associations
+  defp format_association_config(assoc_name, assoc_config) do
+    assoc_name_key = assoc_name |> inspect()
+
+    # Check if this is a through association
+    if assoc_config[:is_through] do
+      format_through_association(assoc_name_key, assoc_name, assoc_config)
+    else
+      format_standard_association(assoc_name_key, assoc_name, assoc_config)
+    end
+  end
+
+  # Format a standard (non-through) association
+  defp format_standard_association(assoc_name_key, assoc_name, assoc_config) do
+    queryable_name = get_queryable_name(assoc_config) |> inspect()
+    owner_key = assoc_config[:owner_key] |> inspect()
+    related_key = assoc_config[:related_key] |> inspect()
+
+    # Check for many-to-many with join_through
+    if assoc_config[:join_through] do
+      join_through = assoc_config[:join_through] |> inspect()
+      "#{assoc_name_key} => %{\n" <>
+      "              queryable: #{queryable_name},\n" <>
+      "              field: #{inspect(assoc_name)},\n" <>
+      "              owner_key: #{owner_key},\n" <>
+      "              related_key: #{related_key},\n" <>
+      "              join_through: #{join_through}\n" <>
+      "            }"
+    else
+      "#{assoc_name_key} => %{\n" <>
+      "              queryable: #{queryable_name},\n" <>
+      "              field: #{inspect(assoc_name)},\n" <>
+      "              owner_key: #{owner_key},\n" <>
+      "              related_key: #{related_key}\n" <>
+      "            }"
+    end
+  end
+
+  # Format a through association - includes the through path for selecto to expand
+  defp format_through_association(assoc_name_key, assoc_name, assoc_config) do
+    queryable_name = get_queryable_name(assoc_config) |> inspect()
+
+    # Get the through path - this tells selecto how to traverse the associations
+    through_path = case assoc_config[:through_path] do
+      path when is_list(path) -> inspect(path)
+      _ -> "[]"
+    end
+
+    "#{assoc_name_key} => %{\n" <>
+    "              queryable: #{queryable_name},\n" <>
+    "              field: #{inspect(assoc_name)},\n" <>
+    "              through: #{through_path}\n" <>
+    "            }"
   end
 
   defp get_queryable_name(assoc_config) do
@@ -401,9 +441,9 @@ defmodule SelectoMix.DomainGenerator do
     expand_modes = config[:expand_modes] || %{}
 
     # Generate schema configurations for associations
+    # Include through associations - selecto now handles them
     schema_configs =
       associations
-      |> Enum.reject(fn {_name, assoc} -> assoc[:is_through] end)
       |> Enum.map(fn {_assoc_name, assoc_config} ->
         # Use the singular schema name, not the queryable/association name
         related_schema = assoc_config[:related_schema]
@@ -939,8 +979,8 @@ defmodule SelectoMix.DomainGenerator do
   # Helper functions for join generation
   
   defp generate_association_joins(associations) do
+    # Include through associations - selecto now handles them properly
     associations
-    |> Enum.reject(fn {_name, assoc} -> assoc[:is_through] end)
     |> Enum.into(%{}, fn {assoc_name, assoc_config} ->
       # Determine the source table/schema name
       queryable = assoc_config[:queryable] || assoc_name
@@ -953,6 +993,16 @@ defmodule SelectoMix.DomainGenerator do
         on: build_join_on_clause(assoc_config),
         is_custom: assoc_config[:is_custom] == true
       }
+
+      # Add through association configuration
+      join_config = if assoc_config[:is_through] do
+        Map.merge(join_config, %{
+          is_through: true,
+          through_path: assoc_config[:through_path] || []
+        })
+      else
+        join_config
+      end
 
       # Add many-to-many specific configuration
       join_config = if assoc_config[:association_type] == :many_to_many do
@@ -985,6 +1035,7 @@ defmodule SelectoMix.DomainGenerator do
     is_custom = Map.get(join_config, :is_custom, false)
     is_parameterized = Map.has_key?(join_config, :parameters)
     is_many_to_many = Map.has_key?(join_config, :join_through)
+    is_through = Map.get(join_config, :is_through, false)
 
     # Note: Custom markers are disabled for now due to Sourceror parsing issues with inline comments
     # TODO: Re-enable once we find a parser-safe format
@@ -993,6 +1044,7 @@ defmodule SelectoMix.DomainGenerator do
       is_custom -> " # CUSTOM JOIN"
       is_parameterized -> " # PARAMETERIZED JOIN"
       is_many_to_many -> " # MANY-TO-MANY"
+      is_through -> " # THROUGH ASSOCIATION"
       true -> ""
     end
 
@@ -1025,6 +1077,14 @@ defmodule SelectoMix.DomainGenerator do
       ""
     end
 
+    # Add through association specific configuration
+    through_config = if is_through do
+      through_path = Map.get(join_config, :through_path, [])
+      ",\n              through: #{inspect(through_path)}"
+    else
+      ""
+    end
+
     # Add parameterized join specific configurations
     parameterized_config = if is_parameterized do
       parameters_config = format_parameters_config(join_config[:parameters])
@@ -1044,7 +1104,7 @@ defmodule SelectoMix.DomainGenerator do
       condition -> ",\n              join_condition: #{inspect(condition)}"
     end
 
-    base_config <> source_config <> many_to_many_config <> parameterized_config <> join_condition_config <> "\n            }"
+    base_config <> source_config <> many_to_many_config <> through_config <> parameterized_config <> join_condition_config <> "\n            }"
   end
   
   defp format_parameters_config(parameters) when is_list(parameters) do
