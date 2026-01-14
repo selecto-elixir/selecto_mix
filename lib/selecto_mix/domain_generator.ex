@@ -1087,10 +1087,14 @@ defmodule SelectoMix.DomainGenerator do
     end
 
     # Add source and on clause (required for association-based joins, skip for non_assoc)
-    source_config = if !is_non_assoc and (source = Map.get(join_config, :source)) do
-      on_clause = Map.get(join_config, :on, [])
-      ",\n              source: #{inspect(source)},\n" <>
-      "              on: #{inspect(on_clause)}"
+    source_config = if !is_non_assoc do
+      case Map.get(join_config, :source) do
+        nil -> ""
+        source_val ->
+          on_clause = Map.get(join_config, :on, [])
+          ",\n              source: #{inspect(source_val)},\n" <>
+          "              on: #{inspect(on_clause)}"
+      end
     else
       ""
     end
