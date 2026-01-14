@@ -1033,6 +1033,7 @@ defmodule SelectoMix.DomainGenerator do
   
   defp format_single_join(join_name, join_config) do
     is_custom = Map.get(join_config, :is_custom, false)
+    is_non_assoc = Map.get(join_config, :non_assoc, false)
     is_parameterized = Map.has_key?(join_config, :parameters)
     is_many_to_many = Map.has_key?(join_config, :join_through)
     is_through = Map.get(join_config, :is_through, false)
@@ -1040,6 +1041,7 @@ defmodule SelectoMix.DomainGenerator do
     # Note: Custom markers are disabled for now due to Sourceror parsing issues with inline comments
     # TODO: Re-enable once we find a parser-safe format
     _custom_marker = cond do
+      is_non_assoc -> " # NON-ASSOCIATION JOIN"
       is_custom and is_parameterized -> " # CUSTOM PARAMETERIZED JOIN"
       is_custom -> " # CUSTOM JOIN"
       is_parameterized -> " # PARAMETERIZED JOIN"
@@ -1055,8 +1057,37 @@ defmodule SelectoMix.DomainGenerator do
                   "              name: \"#{join_name_str}\",\n" <>
                   "              type: #{join_type}"
 
-    # Add source and on clause (required for all joins)
-    source_config = if source = Map.get(join_config, :source) do
+    # Add non_assoc flag for custom joins without Ecto associations
+    non_assoc_config = if is_non_assoc do
+      owner_key = Map.get(join_config, :owner_key, :id)
+      related_key = Map.get(join_config, :related_key, :id)
+      source_table = Map.get(join_config, :source, to_string(join_name))
+
+      config = ",\n              non_assoc: true,\n" <>
+               "              source: #{inspect(source_table)},\n" <>
+               "              owner_key: #{inspect(owner_key)},\n" <>
+               "              related_key: #{inspect(related_key)}"
+
+      # Add optional fields configuration for non-assoc joins
+      config = if fields = Map.get(join_config, :fields) do
+        fields_config = format_join_fields_config(fields)
+        config <> ",\n              fields: #{fields_config}"
+      else
+        config
+      end
+
+      # Add optional filters configuration for non-assoc joins
+      if filters = Map.get(join_config, :filters) do
+        config <> ",\n              filters: #{inspect(filters)}"
+      else
+        config
+      end
+    else
+      ""
+    end
+
+    # Add source and on clause (required for association-based joins, skip for non_assoc)
+    source_config = if !is_non_assoc and (source = Map.get(join_config, :source)) do
       on_clause = Map.get(join_config, :on, [])
       ",\n              source: #{inspect(source)},\n" <>
       "              on: #{inspect(on_clause)}"
@@ -1104,7 +1135,7 @@ defmodule SelectoMix.DomainGenerator do
       condition -> ",\n              join_condition: #{inspect(condition)}"
     end
 
-    base_config <> source_config <> many_to_many_config <> through_config <> parameterized_config <> join_condition_config <> "\n            }"
+    base_config <> non_assoc_config <> source_config <> many_to_many_config <> through_config <> parameterized_config <> join_condition_config <> "\n            }"
   end
   
   defp format_parameters_config(parameters) when is_list(parameters) do
