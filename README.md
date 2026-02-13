@@ -27,6 +27,12 @@ def deps do
 end
 ```
 
+## Release Status (0.3.x)
+
+- **Stable**: Domain generation (`mix selecto.gen.domain`), overlay generation/update flows, and customization preservation.
+- **Experimental**: `mix selecto.validate.parameterized_joins` validation coverage is implemented and actively evolving as additional edge cases are standardized.
+- **Not Included**: `selecto_mix` does not generate `*_queries.ex` runtime query helper modules in the current `0.3.x` scope.
+
 ## Quick Start
 
 1. **Generate domains for all schemas:**
