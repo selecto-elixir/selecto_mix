@@ -987,12 +987,12 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     igniter
     |> Igniter.add_notice("""
 
-    To integrate SelectoComponents assets (if not already done), run:
+      To integrate SelectoComponents assets (if not already done), run:
         mix selecto.components.integrate
 
-    Or manually configure:
-      1. Import hooks in assets/js/app.js
-      2. Add @source directive in assets/css/app.css
+      Or manually configure:
+        1. Import hooks in assets/js/app.js
+        2. Add @source directive in assets/css/app.css
       """)
   end
 
