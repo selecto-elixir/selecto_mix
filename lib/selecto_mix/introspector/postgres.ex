@@ -373,6 +373,14 @@ defmodule SelectoMix.Introspector.Postgres do
     end
   end
 
+  defp query(conn, sql, params) do
+    if Code.ensure_loaded?(Postgrex) do
+      apply(Postgrex, :query, [conn, sql, params])
+    else
+      {:error, :postgrex_not_available}
+    end
+  end
+
   @doc """
   Map PostgreSQL type to Elixir/Ecto type.
 
@@ -390,14 +398,6 @@ defmodule SelectoMix.Introspector.Postgres do
   Elixir type atom (`:integer`, `:string`, `:boolean`, etc)
   """
   def map_pg_type(data_type, udt_name \\ nil, conn \\ nil)
-
-  defp query(conn, sql, params) do
-    if Code.ensure_loaded?(Postgrex) do
-      apply(Postgrex, :query, [conn, sql, params])
-    else
-      {:error, :postgrex_not_available}
-    end
-  end
 
   # Integer types
   def map_pg_type("integer", _, _), do: :integer
