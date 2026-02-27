@@ -50,8 +50,8 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
     Mix.shell().info("🔧 SelectoComponents Asset Integration")
     Mix.shell().info("=====================================\n")
 
-    # Check if Chart.js is installed
-    check_chart_js_installation()
+    # Check if Chart.js/Alpine.js are configured in package.json
+    check_chart_js_installation(opts)
 
     app_js_status = integrate_app_js(opts)
     app_css_status = integrate_app_css(opts)
@@ -78,8 +78,9 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
     """)
   end
 
-  defp check_chart_js_installation do
+  defp check_chart_js_installation(opts) do
     package_json_path = "assets/package.json"
+    check_only? = opts[:check] == true
 
     if File.exists?(package_json_path) do
       case File.read(package_json_path) do
@@ -90,12 +91,17 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
 
           if needs_chart || needs_alpine do
             # Add missing dependencies to existing package.json
-            add_dependencies_to_package_json(
-              package_json_path,
-              content,
-              needs_chart,
-              needs_alpine
-            )
+            if check_only? do
+              if needs_chart, do: Mix.shell().info("⚠ Chart.js missing from package.json")
+              if needs_alpine, do: Mix.shell().info("⚠ Alpine.js missing from package.json")
+            else
+              add_dependencies_to_package_json(
+                package_json_path,
+                content,
+                needs_chart,
+                needs_alpine
+              )
+            end
           else
             Mix.shell().info("✓ Chart.js: Already configured in package.json")
             Mix.shell().info("✓ Alpine.js: Already configured in package.json")
@@ -105,8 +111,12 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
           :ok
       end
     else
-      # Create a minimal package.json with Chart.js and Alpine.js
-      create_package_json_with_dependencies(package_json_path)
+      if check_only? do
+        Mix.shell().info("⚠ assets/package.json missing (would create with Chart.js + Alpine.js)")
+      else
+        # Create a minimal package.json with Chart.js and Alpine.js
+        create_package_json_with_dependencies(package_json_path)
+      end
     end
   end
 

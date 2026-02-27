@@ -207,7 +207,7 @@ end
 ## Available Mix Tasks
 
 - `mix selecto.gen.domain` - Generate Selecto domain configurations
-- `mix selecto.install` - Install Selecto dependencies and setup project structure  
+- `mix selecto.install` - Install Selecto deps + run asset integration (`--development-mode --source your-fork` supported)
 - `mix selecto.update` - Update existing domain configurations after schema changes
 
 ## Contributing
