@@ -728,11 +728,11 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
   end
 
   defp ensure_livesocket_hooks(content) do
-    String.replace(content, ~r/hooks:\s*{([^}]*)}/, fn _full, hooks_body ->
+    Regex.replace(~r/hooks:\s*{([^}]*)}/, content, fn _full, hooks_body ->
       existing_hooks = hooks_body |> String.trim() |> String.trim_trailing(",")
 
       additions =
-        []
+        ""
         |> maybe_add_hook_entry(existing_hooks, "TreeBuilder: TreeBuilderHook")
         |> maybe_add_hook_entry(existing_hooks, "...selectoComponentsHooks")
         |> maybe_add_hook_entry(existing_hooks, "...selectoHooks")

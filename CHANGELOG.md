@@ -1,6 +1,14 @@
 CHANGES
 =======
 
+V 0.3.6
+-------
+
+- Fixed a crash in `mix selecto.components.integrate` when updating existing
+  `hooks: {...}` LiveSocket config blocks by switching to `Regex.replace/4`
+  capture replacement.
+- Bump package version to `0.3.6`.
+
 V 0.3.5
 -------
 
