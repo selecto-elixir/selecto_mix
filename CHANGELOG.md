@@ -1,6 +1,15 @@
 CHANGES
 =======
 
+V 0.3.4
+-------
+
+- Fixed generated saved-view dropdown links in `mix selecto.gen.domain` so
+  `#{@path}`/`#{v}` interpolation renders correctly in HEEx.
+- Replaced Alpine-only dropdown behavior with a native `<details>` menu in
+  generated views, avoiding "stuck open" behavior when Alpine is absent.
+- Bump package version to `0.3.4`.
+
 V 0.3.3
 -------
 
