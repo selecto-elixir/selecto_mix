@@ -7,6 +7,9 @@ Next
 - Added `mix selecto.install` (Igniter task) to bootstrap Selecto dependencies,
   run components integration, and support development-mode vendor clones from
   a configurable GitHub source owner (`--development-mode --source your-fork`).
+- Documented the recommended happy-path installation flow in README:
+  `mix igniter.install selecto_mix`, then `cd assets && npm install`, then
+  `mix assets.build`.
 
 V 0.3.7
 -------

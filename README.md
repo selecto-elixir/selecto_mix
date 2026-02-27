@@ -38,6 +38,20 @@ def deps do
 end
 ```
 
+Then run the installer (recommended for most projects):
+
+```bash
+mix igniter.install selecto_mix
+cd assets && npm install
+mix assets.build
+```
+
+Development mode (use your fork/source owner for vendor clones):
+
+```bash
+mix selecto.install --development-mode --source your-github-user
+```
+
 ## Release Status (0.3.x)
 
 - **Alpha**: Domain generation (`mix selecto.gen.domain`), overlay generation/update flows, and customization preservation are usable but not yet stable.
