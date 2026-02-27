@@ -1,6 +1,18 @@
 CHANGES
 =======
 
+V 0.3.5
+-------
+
+- Fixed `mix selecto.components.integrate` to use
+  `phoenix-colocated/selecto_components` plus local `./selecto_hooks` imports
+  instead of non-existent `selecto_components/assets/js/hooks` paths in Hex
+  dependency installs.
+- Added legacy import normalization when re-running
+  `mix selecto.components.integrate`, so previously generated broken hooks
+  import lines are auto-corrected.
+- Bump package version to `0.3.5`.
+
 V 0.3.4
 -------
 
@@ -10,6 +22,10 @@ V 0.3.4
   generated views, avoiding "stuck open" behavior when Alpine is absent.
 - Updated `mix selecto.components.integrate` to detect `vendor/` vs `deps/`
   for JavaScript SelectoComponents import paths (CSS already did this).
+- Fixed `mix selecto.components.integrate` to use
+  `phoenix-colocated/selecto_components` + local `./selecto_hooks` imports
+  instead of non-existent `selecto_components/assets/js/hooks` in Hex deps,
+  and auto-normalize legacy broken import lines when re-run.
 - Bump package version to `0.3.4`.
 
 V 0.3.3
