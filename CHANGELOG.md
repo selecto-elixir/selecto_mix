@@ -10,6 +10,13 @@ Next
 - Documented the recommended happy-path installation flow in README:
   `mix igniter.install selecto_mix`, then `cd assets && npm install`, then
   `mix assets.build`.
+- Added `mix selecto_mix.install` as an alias to `mix selecto.install` for
+  explicit package-scoped install UX.
+- Fixed `mix selecto.install` dependency rewrites to preserve valid comma
+  separation when appending/removing dependency lines in `mix.exs`.
+- Updated `selecto_mix`'s own `:igniter` dependency declaration to
+  `only: [:dev, :test]` to avoid option conflicts in apps that already scope
+  Igniter to dev/test.
 
 V 0.3.7
 -------

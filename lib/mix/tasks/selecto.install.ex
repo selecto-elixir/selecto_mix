@@ -189,7 +189,7 @@ defmodule Mix.Tasks.Selecto.Install do
 
         combined_lines =
           (filtered_body_lines ++ new_dep_lines)
-          |> Enum.map(&String.trim_trailing/1)
+          |> Enum.map(&normalize_dep_line/1)
 
         new_body =
           case combined_lines do
@@ -212,6 +212,25 @@ defmodule Mix.Tasks.Selecto.Install do
     Enum.any?(apps, fn app ->
       String.contains?(line, "{:#{app},")
     end)
+  end
+
+  defp normalize_dep_line(line) do
+    trimmed_trailing = String.trim_trailing(line)
+    trimmed = String.trim(trimmed_trailing)
+
+    cond do
+      trimmed == "" ->
+        ""
+
+      String.starts_with?(trimmed, "#") ->
+        trimmed_trailing
+
+      String.starts_with?(trimmed, "{:") and not String.ends_with?(trimmed, ",") ->
+        trimmed_trailing <> ","
+
+      true ->
+        trimmed_trailing
+    end
   end
 
   defp clone_vendor_repos(specs, source, check?) do
