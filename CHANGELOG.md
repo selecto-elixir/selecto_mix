@@ -1,6 +1,13 @@
 CHANGES
 =======
 
+V 0.3.7
+-------
+
+- Updated `mix selecto.components.integrate` to always print clear post-run
+  asset steps: `cd assets && npm install` and `mix assets.build`.
+- Bump package version to `0.3.7`.
+
 V 0.3.6
 -------
 

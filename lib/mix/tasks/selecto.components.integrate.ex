@@ -62,14 +62,20 @@ defmodule Mix.Tasks.Selecto.Components.Integrate do
       report_integration_status(app_js_status, app_css_status)
 
       if app_js_status == :updated || app_css_status == :updated do
-        Mix.shell().info("""
-
-        ✅ Integration complete!
-
-        Run `mix assets.build` to compile your assets.
-        """)
+        Mix.shell().info("\n✅ Integration complete!")
       end
+
+      print_next_steps()
     end
+  end
+
+  defp print_next_steps do
+    Mix.shell().info("""
+
+    Next steps:
+      1. Run `cd assets && npm install`
+      2. Run `mix assets.build`
+    """)
   end
 
   defp check_chart_js_installation do
