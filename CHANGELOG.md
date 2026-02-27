@@ -4,6 +4,8 @@ CHANGES
 Next
 ----
 
+- Fixed installer task compilation in consuming apps by restoring `:igniter`
+  dependency availability in all environments (not scoped to dev/test).
 - Added `mix selecto.install` (Igniter task) to bootstrap Selecto dependencies,
   run components integration, and support development-mode vendor clones from
   a configurable GitHub source owner (`--development-mode --source your-fork`).
