@@ -8,6 +8,8 @@ V 0.3.4
   `#{@path}`/`#{v}` interpolation renders correctly in HEEx.
 - Replaced Alpine-only dropdown behavior with a native `<details>` menu in
   generated views, avoiding "stuck open" behavior when Alpine is absent.
+- Updated `mix selecto.components.integrate` to detect `vendor/` vs `deps/`
+  for JavaScript SelectoComponents import paths (CSS already did this).
 - Bump package version to `0.3.4`.
 
 V 0.3.3
