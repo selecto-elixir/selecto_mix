@@ -15,6 +15,8 @@ defmodule Mix.Tasks.SelectoMix.Install do
 
   use Mix.Task
 
+  def supports_umbrella?, do: true
+
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("selecto.install", args)

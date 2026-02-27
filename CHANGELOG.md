@@ -16,9 +16,8 @@ Next
   explicit package-scoped install UX.
 - Fixed `mix selecto.install` dependency rewrites to preserve valid comma
   separation when appending/removing dependency lines in `mix.exs`.
-- Updated `selecto_mix`'s own `:igniter` dependency declaration to
-  `only: [:dev, :test]` to avoid option conflicts in apps that already scope
-  Igniter to dev/test.
+- Fixed `mix igniter.install selecto_mix` installer dispatch for
+  `mix selecto_mix.install` by defining `supports_umbrella?/0`.
 
 V 0.3.7
 -------
