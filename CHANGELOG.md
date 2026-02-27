@@ -18,6 +18,9 @@ Next
   separation when appending/removing dependency lines in `mix.exs`.
 - Fixed `mix igniter.install selecto_mix` installer dispatch for
   `mix selecto_mix.install` by defining `supports_umbrella?/0`.
+- Fixed `mix igniter.install selecto_mix` compatibility by converting
+  `mix selecto_mix.install` to an `Igniter.Mix.Task` alias implementation
+  (resolves missing `parse_argv/1` runtime error).
 
 V 0.3.7
 -------

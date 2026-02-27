@@ -1,10 +1,11 @@
 defmodule Mix.Tasks.SelectoMix.Install do
-  @shortdoc "Install Selecto dependencies (alias for selecto.install)"
+  @shortdoc "Install Selecto dependencies"
   @moduledoc """
-  Alias task for `mix selecto.install`.
+  Install Selecto ecosystem dependencies (including `:selecto` and
+  `:selecto_components`) and run SelectoComponents integration.
 
-  This task installs Selecto ecosystem dependencies (including
-  `:selecto` and `:selecto_components`) and runs SelectoComponents integration.
+  This task is a package-scoped alias of `mix selecto.install` and supports
+  `mix igniter.install selecto_mix` installer execution.
 
   ## Usage
 
@@ -13,12 +14,17 @@ defmodule Mix.Tasks.SelectoMix.Install do
       mix selecto_mix.install --postgis
   """
 
-  use Mix.Task
+  use Igniter.Mix.Task
+
+  @impl Igniter.Mix.Task
+  def info(_argv, _composing_task) do
+    Mix.Tasks.Selecto.Install.info([], nil)
+  end
 
   def supports_umbrella?, do: true
 
-  @impl Mix.Task
-  def run(args) do
-    Mix.Task.run("selecto.install", args)
+  @impl Igniter.Mix.Task
+  def igniter(igniter) do
+    Mix.Tasks.Selecto.Install.igniter(igniter)
   end
 end
