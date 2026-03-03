@@ -224,6 +224,14 @@ end
 - `mix selecto.install` - Install Selecto deps + run asset integration (`--development-mode --source your-fork` supported)
 - `mix selecto.update` - Update existing domain configurations after schema changes
 
+## Property Testing
+
+Run the SelectoMix property suite:
+
+```bash
+mix test test/selecto_mix_property_test.exs
+```
+
 ## Contributing
 
 1. Fork the repository
