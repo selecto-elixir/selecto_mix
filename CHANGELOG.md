@@ -4,6 +4,15 @@ CHANGES
 V NEXT
 ------
 
+V 0.3.12
+--------
+
+- Updated installer dependency baselines in `mix selecto.install` to target
+  current ecosystem releases (`selecto >= 0.3.10`,
+  `selecto_components >= 0.3.12`).
+- Updated README dependency guidance for the coordinated ecosystem release.
+- Bump package version to `0.3.12`.
+
 V 0.3.11
 --------
 
