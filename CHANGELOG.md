@@ -4,6 +4,13 @@ CHANGES
 V NEXT
 ------
 
+- Updated `mix selecto.components.integrate` to treat Phoenix LiveView
+  colocated hooks as the canonical SelectoComponents integration path, removing
+  generated `./selecto_hooks`, `TreeBuilderHook`, and Alpine.js requirements.
+- Updated integration patching/manual guidance so generated LiveSocket wiring
+  uses only `phoenix-colocated/selecto_components` hooks plus the Tailwind
+  `@source` entry for SelectoComponents.
+
 V 0.3.14
 --------
 
