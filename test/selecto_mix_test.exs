@@ -2,7 +2,14 @@ defmodule SelectoMixTest do
   use ExUnit.Case
   doctest SelectoMix
 
-  alias SelectoMix.{SchemaIntrospector, ConfigMerger, DomainGenerator}
+  alias SelectoMix.{
+    AdapterResolver,
+    ConfigMerger,
+    ConnectionOpts,
+    DomainGenerator,
+    LiveViewGenerator,
+    SchemaIntrospector
+  }
 
   describe "SelectoMix basic functionality" do
     test "version/0 returns version string" do
@@ -171,6 +178,93 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "join_keys: [product_id: :id, tag_id: :id]")
       assert String.contains?(result, "main_foreign_key: \"product_id\"")
       assert String.contains?(result, "tag_foreign_key: \"tag_id\"")
+    end
+
+    test "generate_domain_file/3 creates DB-backed helper functions" do
+      source = {:db, SelectoDBPostgreSQL.Adapter, :fake_conn, "products", schema: "public"}
+
+      config = %{
+        table_name: "products",
+        primary_key: :id,
+        fields: [:id, :name],
+        field_types: %{id: :integer, name: :string},
+        associations: %{},
+        suggested_defaults: %{
+          default_selected: [:name],
+          default_filters: %{},
+          default_order: []
+        },
+        metadata: %{
+          module_name: "Product",
+          context_name: "PostgreSQL"
+        },
+        source_type: :db,
+        adapter: SelectoDBPostgreSQL.Adapter
+      }
+
+      result = DomainGenerator.generate_domain_file(source, config, app_name: "Shop")
+
+      assert String.contains?(result, "defmodule Shop.SelectoDomains.ProductDomain")
+      assert String.contains?(result, "def source_table, do: \"products\"")
+      assert String.contains?(result, "def adapter_module, do: SelectoDBPostgreSQL.Adapter")
+      refute String.contains?(result, "def from_ecto")
+
+      assert String.contains?(
+               result,
+               "mix selecto.gen.domain --adapter postgresql --table products"
+             )
+    end
+  end
+
+  describe "adapter-backed helpers" do
+    test "adapter resolver accepts short adapter names" do
+      assert {:ok, SelectoDBPostgreSQL.Adapter} = AdapterResolver.resolve("postgresql")
+    end
+
+    test "connection opts parse convenience flags" do
+      opts =
+        ConnectionOpts.from_parsed_args(%{
+          database: "shop_dev",
+          host: "localhost",
+          port: 5432,
+          username: "postgres",
+          password: "secret"
+        })
+
+      assert opts[:database] == "shop_dev"
+      assert opts[:hostname] == "localhost"
+      assert opts[:port] == 5432
+      assert opts[:username] == "postgres"
+      assert opts[:password] == "secret"
+    end
+  end
+
+  describe "LiveViewGenerator" do
+    test "renders DB-backed live view template with database connection" do
+      source = {:db, SelectoDBPostgreSQL.Adapter, :fake_conn, "products", schema: "public"}
+
+      result =
+        LiveViewGenerator.render_live_view_template(
+          "Shop",
+          source,
+          "Shop.SelectoDomains.ProductDomain",
+          [connection_name: "Shop.Database"],
+          "deps"
+        )
+
+      assert String.contains?(result, "defmodule ShopWeb.ProductLive")
+      assert String.contains?(result, "Selecto.configure(domain, Shop.Database)")
+      refute String.contains?(result, "Shop.Repo")
+    end
+
+    test "builds DB-backed live view file paths from table names" do
+      source = {:db, SelectoDBPostgreSQL.Adapter, :fake_conn, "order_items", schema: "public"}
+
+      assert LiveViewGenerator.live_view_file_path("shop", source) ==
+               "lib/shop_web/live/order_item_live.ex"
+
+      assert LiveViewGenerator.live_view_html_file_path("shop", source) ==
+               "lib/shop_web/live/order_item_live.html.heex"
     end
   end
 

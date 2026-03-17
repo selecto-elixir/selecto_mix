@@ -1620,12 +1620,22 @@ defmodule SelectoMix.DomainGenerator do
   defp adapter_cli_name(nil), do: "postgresql"
 
   defp adapter_cli_name(adapter) when is_atom(adapter) do
-    adapter
-    |> Module.split()
-    |> Enum.at(-2, "PostgreSQL")
-    |> String.replace_prefix("SelectoDB", "")
-    |> Macro.underscore()
+    cond do
+      Code.ensure_loaded?(adapter) and function_exported?(adapter, :name, 0) ->
+        adapter.name() |> to_string()
+
+      true ->
+        adapter
+        |> Module.split()
+        |> Enum.at(-2, "PostgreSQL")
+        |> String.replace_prefix("SelectoDB", "")
+        |> normalize_adapter_cli_name()
+    end
   end
+
+  defp normalize_adapter_cli_name("PostgreSQL"), do: "postgresql"
+  defp normalize_adapter_cli_name("MSSQL"), do: "mssql"
+  defp normalize_adapter_cli_name(name), do: Macro.underscore(name)
 
   # New helper functions for advanced Selecto features
 

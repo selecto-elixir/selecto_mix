@@ -76,7 +76,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   use Igniter.Mix.Task
 
-  alias SelectoMix.{AdapterResolver, Connection, ConnectionOpts}
+  alias SelectoMix.{AdapterResolver, Connection, ConnectionOpts, LiveViewGenerator}
 
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do
@@ -282,6 +282,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   defp process_db_tables(igniter, adapter, conn, tables, opts) do
     output_dir = get_output_directory(igniter, opts[:output])
+    opts = Map.put_new(opts, :app_name, Igniter.Project.Application.app_name(igniter))
 
     if opts[:dry_run] do
       show_dry_run_summary(tables, output_dir, opts)
@@ -510,7 +511,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
       if opts[:live] do
         app_name = output_app_name(opts)
-        schema_name = source_live_name(schema) |> Macro.underscore()
+        schema_name = LiveViewGenerator.source_live_name(schema) |> Macro.underscore()
 
         live_file = "lib/#{app_name}_web/live/#{schema_name}_live.ex"
         html_file = "lib/#{app_name}_web/live/#{schema_name}_live.html.heex"
@@ -900,8 +901,8 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   defp generate_live_view_for_schema(igniter, source, opts) do
     app_name = Igniter.Project.Application.app_name(igniter)
 
-    live_file = live_view_file_path(app_name, source)
-    html_file = live_view_html_file_path(app_name, source)
+    live_file = LiveViewGenerator.live_view_file_path(app_name, source)
+    html_file = LiveViewGenerator.live_view_html_file_path(app_name, source)
 
     igniter
     |> ensure_live_directory_exists(app_name)
@@ -952,18 +953,6 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     end
   end
 
-  defp live_view_file_path(app_name_atom, source) do
-    app_name = app_name_atom |> to_string()
-    schema_name = source_live_name(source) |> Macro.underscore()
-    "lib/#{app_name}_web/live/#{schema_name}_live.ex"
-  end
-
-  defp live_view_html_file_path(app_name_atom, source) do
-    app_name = app_name_atom |> to_string()
-    schema_name = source_live_name(source) |> Macro.underscore()
-    "lib/#{app_name}_web/live/#{schema_name}_live.html.heex"
-  end
-
   defp ensure_live_directory_exists(igniter, app_name_atom) do
     app_name = app_name_atom |> to_string() |> Macro.underscore()
     live_dir = "lib/#{app_name}_web/live"
@@ -976,254 +965,25 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   defp generate_live_view_html_file(igniter, source, file_path, opts) do
-    content = render_live_view_html_template(source, opts)
+    content = LiveViewGenerator.render_live_view_html_template(source, opts)
     Igniter.create_new_file(igniter, file_path, content)
   end
 
   defp render_live_view_template(igniter, source, opts) do
     app_name = Igniter.Project.Application.app_name(igniter) |> to_string() |> Macro.camelize()
-    schema_name = source_live_name(source)
-    schema_underscore = Macro.underscore(schema_name)
-    web_module = "#{app_name}Web"
-    connection_ref = live_view_connection_ref(source, app_name, opts)
 
     domain_config = SelectoMix.SchemaIntrospector.introspect_schema(source, Map.to_list(opts))
 
     domain_module =
       SelectoMix.DomainGenerator.domain_module_name(source, domain_config, app_name: app_name)
 
-    # Use custom path if provided, otherwise use singular form
-    route_path = opts[:path] || "/#{schema_underscore}"
-    # Ensure path starts with /
-    route_path = if String.starts_with?(route_path, "/"), do: route_path, else: "/#{route_path}"
-
-    saved_views_code =
-      if opts[:saved_views] do
-        """
-          saved_views = #{domain_module}.get_view_names(path)
-
-          socket =
-            assign(socket,
-              show_view_configurator: false,
-              views: views,
-              my_path: path,
-              saved_view_module: #{domain_module},
-              saved_view_context: path,
-              path: path,
-              available_saved_views: saved_views
-            )
-        """
-      else
-        """
-          socket =
-            assign(socket,
-              show_view_configurator: false,
-              views: views,
-              my_path: path
-            )
-        """
-      end
-
-    """
-    defmodule #{web_module}.#{schema_name}Live do
-      @moduledoc \"\"\"
-      LiveView for #{schema_name} using SelectoComponents.
-      
-      ## Quick Setup (Phoenix 1.7+)
-      
-      1. Import hooks in `assets/js/app.js`:
-         ```javascript
-         import {hooks as selectoHooks} from "phoenix-colocated/selecto_components"
-         // Add to your liveSocket hooks: { ...selectoHooks }
-         ```
-      
-      2. Add to Tailwind in `assets/css/app.css`:
-         ```css
-         @source "../../#{get_selecto_components_location()}/selecto_components/lib/**/*.{ex,heex}";
-         ```
-      
-      3. Run `mix assets.build`
-      
-      That's it! The drag-and-drop query builder and charts will work automatically.
-      \"\"\"
-
-      use #{web_module}, :live_view
-      use SelectoComponents.Form
-
-      @impl true
-      def mount(_params, _session, socket) do
-        # Configure the domain and path
-        domain = #{domain_module}.domain()
-        path = "#{route_path}"
-
-        # Configure Selecto to use the configured connection
-        selecto = Selecto.configure(domain, #{connection_ref})
-
-        views = [
-          {:aggregate, SelectoComponents.Views.Aggregate, "Aggregate View", %{drill_down: :detail}},
-          {:detail, SelectoComponents.Views.Detail, "Detail View", %{}},
-          {:graph, SelectoComponents.Views.Graph, "Graph View", %{}}
-        ]
-
-        state = get_initial_state(views, selecto)
-
-    #{saved_views_code}
-
-        {:ok, assign(socket, state), layout: {#{web_module}.Layouts, :root}}
-      end
-
-      @impl true
-      def render(assigns) do
-        ~H\"\"\"
-        <div class="container mx-auto px-4 py-8">
-          #{render_inline_header(schema_name, schema_underscore, opts)}
-
-          <.live_component
-            module={SelectoComponents.Form}
-            id="#{schema_underscore}-form"
-            #{if opts[:enable_modal], do: "enable_modal_detail={true}", else: ""}
-            {assigns}
-          />
-
-          <.live_component
-            module={SelectoComponents.Results}
-            id="#{schema_underscore}-results"
-            {assigns}
-          />
-        </div>
-        \"\"\"
-      end
-
-      @impl true
-      def handle_event("toggle_show_view_configurator", _params, socket) do
-        {:noreply, assign(socket, show_view_configurator: !socket.assigns.show_view_configurator)}
-      end
-    end
-    """
-  end
-
-  defp render_live_view_html_template(source, opts) do
-    schema_name = source_live_name(source)
-
-    saved_views_dropdown =
-      if opts[:saved_views] do
-        ~S"""
-        <details :if={@available_saved_views != []} id="saved-views-dropdown" class="dropdown">
-          <summary class="btn btn-sm btn-outline gap-1">Saved Views</summary>
-          <ul class="menu dropdown-content z-[1] mt-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow">
-            <li :for={v <- @available_saved_views}>
-              <.link href={"#{@path}?saved_view=#{v}"}>{v}</.link>
-            </li>
-          </ul>
-        </details>
-        """
-      else
-        ""
-      end
-
-    saved_view_assigns =
-      if opts[:saved_views] do
-        """
-            saved_view_module={@saved_view_module}
-            saved_view_context={@saved_view_context}
-        """
-      else
-        ""
-      end
-
-    """
-    <div class="flex items-center gap-4 mb-6">
-      <h1 class="text-3xl font-bold">#{schema_name} Data View</h1>
-      #{saved_views_dropdown}
-    </div>
-
-    <div :if={@show_view_configurator}>
-      <.live_component
-        module={SelectoComponents.Form}
-        id="config"
-        view_config={@view_config}
-        selecto={@selecto}
-        executed={@executed}
-        applied_view={nil}
-        active_tab={@active_tab}
-        views={@views}
-        #{if opts[:enable_modal], do: "enable_modal_detail={true}", else: ""}#{saved_view_assigns}
-      />
-    </div>
-
-    <.live_component
-      module={SelectoComponents.Results}
-      selecto={@selecto}
-      query_results={@query_results}
-      applied_view={@applied_view}
-      executed={@executed}
-      views={@views}
-      view_meta={@view_meta}
-      id="results"
-    />
-    """
-  end
-
-  defp render_inline_header(schema_name, _schema_underscore, opts) do
-    if opts[:saved_views] do
-      """
-      <div class="flex items-center gap-4 mb-6">
-            <h1 class="text-3xl font-bold">#{schema_name} Explorer</h1>
-
-            <details :if={@available_saved_views != []} id="saved-views-dropdown" class="dropdown">
-              <summary class="btn btn-sm btn-outline gap-1">Saved Views</summary>
-              <ul class="menu dropdown-content z-[1] mt-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow">
-                <li :for={v <- @available_saved_views}>
-                  <.link href={\"\#{@path}?saved_view=\#{v}\"}>{v}</.link>
-                </li>
-              </ul>
-            </details>
-          </div>
-      """
-    else
-      """
-      <h1 class="text-3xl font-bold mb-6">#{schema_name} Explorer</h1>
-      """
-    end
-  end
-
-  defp source_live_name({:db, _adapter, _conn, table, _opts}) do
-    table
-    |> singularize_table_name()
-    |> Macro.camelize()
-  end
-
-  defp source_live_name({:db, _adapter, _conn, table}) do
-    table
-    |> singularize_table_name()
-    |> Macro.camelize()
-  end
-
-  defp source_live_name(source) when is_atom(source) do
-    source |> to_string() |> String.split(".") |> List.last()
-  end
-
-  defp source_live_name(source) when is_binary(source) do
-    source
-    |> singularize_table_name()
-    |> Macro.camelize()
-  end
-
-  defp source_live_name(source) do
-    source |> to_string() |> singularize_table_name() |> Macro.camelize()
-  end
-
-  defp live_view_connection_ref(source, app_name, opts) do
-    case source do
-      {:db, _adapter, _conn, _table, _source_opts} ->
-        opts[:connection_name] || "#{app_name}.Database"
-
-      {:db, _adapter, _conn, _table} ->
-        opts[:connection_name] || "#{app_name}.Database"
-
-      _ ->
-        "#{app_name}.Repo"
-    end
+    LiveViewGenerator.render_live_view_template(
+      app_name,
+      source,
+      domain_module,
+      opts,
+      get_selecto_components_location()
+    )
   end
 
   defp output_app_name(opts) do
@@ -1233,21 +993,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   defp add_route_suggestion(igniter, source, opts) do
-    schema_name = source_live_name(source)
-    schema_underscore = Macro.underscore(schema_name)
-
-    # Use custom path if provided
-    route_path = opts[:path] || schema_underscore
-    # Remove leading slash if present for the route suggestion
-    route_path = String.replace_prefix(route_path, "/", "")
-
-    route_suggestion = """
-
-    Add this route to your router.ex:
-      live "/#{route_path}", #{schema_name}Live, :index
-    """
-
-    Igniter.add_notice(igniter, route_suggestion)
+    Igniter.add_notice(igniter, LiveViewGenerator.route_suggestion(source, opts))
   end
 
   defp add_success_message(igniter, message) do
