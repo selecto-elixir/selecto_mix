@@ -879,8 +879,11 @@ defmodule SelectoMix.RawPersistence do
 
   def compatibility_notice(adapter_mode) do
     case adapter_mode do
-      :postgresql -> "Run: mix selecto.setup or execute the generated SQL manually"
-      :sqlite -> "Execute the generated SQL against your SQLite database before using the context"
+      :postgresql ->
+        "Run: mix selecto.setup --adapter postgresql or execute the generated SQL manually"
+
+      :sqlite ->
+        "Execute the generated SQL against your SQLite database before using the context"
     end
   end
 
