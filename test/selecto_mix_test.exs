@@ -8,6 +8,7 @@ defmodule SelectoMixTest do
     ConnectionOpts,
     DomainGenerator,
     LiveViewGenerator,
+    OverlayGenerator,
     SchemaIntrospector
   }
 
@@ -236,6 +237,31 @@ defmodule SelectoMixTest do
       assert opts[:port] == 5432
       assert opts[:username] == "postgres"
       assert opts[:password] == "secret"
+    end
+  end
+
+  describe "OverlayGenerator" do
+    test "generate_overlay_file/3 handles ecto source configs" do
+      config = %{
+        source: :ecto,
+        columns: %{
+          name: %{type: :string},
+          price: %{type: :decimal},
+          active: %{type: :boolean}
+        },
+        field_types: %{name: :string, price: :decimal, active: :boolean}
+      }
+
+      result =
+        OverlayGenerator.generate_overlay_file(
+          "Shop.SelectoDomains.ProductDomain",
+          config,
+          []
+        )
+
+      assert result =~ "defmodule Shop.SelectoDomains.Overlays.ProductDomainOverlay"
+      assert result =~ "# defcolumn :price do"
+      assert result =~ "# deffilter \"active\" do"
     end
   end
 

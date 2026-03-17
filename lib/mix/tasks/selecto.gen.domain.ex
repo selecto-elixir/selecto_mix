@@ -653,7 +653,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
     # For now, delete the existing file and create a new one
     # This is a workaround until we figure out the proper Igniter API
-    if File.exists?(file_path) do
+    if opts[:force] && File.exists?(file_path) do
       File.rm!(file_path)
     end
 
@@ -961,11 +961,21 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   defp generate_live_view_file(igniter, source, file_path, opts) do
     content = render_live_view_template(igniter, source, opts)
+
+    if opts[:force] && File.exists?(file_path) do
+      File.rm!(file_path)
+    end
+
     Igniter.create_new_file(igniter, file_path, content)
   end
 
   defp generate_live_view_html_file(igniter, source, file_path, opts) do
     content = LiveViewGenerator.render_live_view_html_template(source, opts)
+
+    if opts[:force] && File.exists?(file_path) do
+      File.rm!(file_path)
+    end
+
     Igniter.create_new_file(igniter, file_path, content)
   end
 
