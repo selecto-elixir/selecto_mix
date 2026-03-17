@@ -1,20 +1,15 @@
 CHANGES
 =======
 
-V NEXT
-------
-
-#### Changed
-- Updated `mix selecto.install` to add the `postgrex` database driver required
-  by the default PostgreSQL adapter path, while preserving an existing app-level
-  `postgrex` dependency declaration when present.
-
 V 0.4.0
 --------
 
 - Updated installer dependency baselines for the `0.4.0` ecosystem release.
 - Updated generated install dependencies to include the external
   `selecto_db_postgresql` adapter package for the default PostgreSQL path.
+- Updated `mix selecto.install` to add the `postgrex` database driver required
+  by the default PostgreSQL adapter path, while preserving an existing app-level
+  `postgrex` dependency declaration when present.
 - Bump package version to `0.4.0`.
 
 V 0.3.16
