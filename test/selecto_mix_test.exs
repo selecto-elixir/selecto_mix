@@ -45,6 +45,133 @@ defmodule SelectoDBMSSQL.Adapter do
   end
 end
 
+defmodule SelectoDBSQLite.Adapter do
+  def name, do: :sqlite
+  def connect(connection), do: {:ok, connection}
+  def execute(_connection, _query, _params, _opts), do: {:ok, %{rows: [], columns: []}}
+  def placeholder(_index), do: "?"
+  def quote_identifier(identifier), do: ~s("#{identifier}")
+  def supports?(:schema_introspection), do: true
+  def supports?(_feature), do: false
+
+  def list_tables(_connection, _opts), do: {:ok, ["orders"]}
+
+  def introspect_table(_connection, "orders", _opts) do
+    {:ok,
+     %{
+       table_name: "orders",
+       schema: "main",
+       fields: [:id, :customer_id, :inserted_at],
+       field_types: %{id: :integer, customer_id: :integer, inserted_at: :string},
+       primary_key: :id,
+       associations: %{
+         customer: %{
+           type: :belongs_to,
+           association_type: :belongs_to,
+           related_schema: "Customer",
+           related_module_name: "Customer",
+           related_table: "customers",
+           queryable: :customers,
+           field: :customer,
+           owner_key: :customer_id,
+           related_key: :id,
+           join_type: :inner,
+           is_through: false,
+           constraint_name: "fk_orders_0"
+         }
+       },
+       columns: %{},
+       source: :sqlite
+     }}
+  end
+end
+
+defmodule SelectoDBMySQL.Adapter do
+  def name, do: :mysql
+  def connect(connection), do: {:ok, connection}
+  def execute(_connection, _query, _params, _opts), do: {:ok, %{rows: [], columns: []}}
+  def placeholder(_index), do: "?"
+  def quote_identifier(identifier), do: "`#{to_string(identifier)}`"
+  def supports?(:schema_introspection), do: true
+  def supports?(_feature), do: false
+
+  def list_tables(_connection, _opts), do: {:ok, ["orders"]}
+
+  def introspect_table(_connection, "orders", opts) do
+    schema = Keyword.get(opts, :schema, "shop_dev")
+
+    {:ok,
+     %{
+       table_name: "orders",
+       schema: schema,
+       fields: [:id, :customer_id, :inserted_at],
+       field_types: %{id: :integer, customer_id: :integer, inserted_at: :naive_datetime},
+       primary_key: :id,
+       associations: %{
+         customer: %{
+           type: :belongs_to,
+           association_type: :belongs_to,
+           related_schema: "Customer",
+           related_module_name: "Customer",
+           related_table: "customers",
+           queryable: :customers,
+           field: :customer,
+           owner_key: :customer_id,
+           related_key: :id,
+           join_type: :inner,
+           is_through: false,
+           constraint_name: "orders_customer_id_fkey"
+         }
+       },
+       columns: %{},
+       source: :mysql
+     }}
+  end
+end
+
+defmodule SelectoDBMariaDB.Adapter do
+  def name, do: :mariadb
+  def connect(connection), do: {:ok, connection}
+  def execute(_connection, _query, _params, _opts), do: {:ok, %{rows: [], columns: []}}
+  def placeholder(_index), do: "?"
+  def quote_identifier(identifier), do: "`#{to_string(identifier)}`"
+  def supports?(:schema_introspection), do: true
+  def supports?(_feature), do: false
+
+  def list_tables(_connection, _opts), do: {:ok, ["orders"]}
+
+  def introspect_table(_connection, "orders", opts) do
+    schema = Keyword.get(opts, :schema, "shop_dev")
+
+    {:ok,
+     %{
+       table_name: "orders",
+       schema: schema,
+       fields: [:id, :customer_id, :inserted_at],
+       field_types: %{id: :integer, customer_id: :integer, inserted_at: :naive_datetime},
+       primary_key: :id,
+       associations: %{
+         customer: %{
+           type: :belongs_to,
+           association_type: :belongs_to,
+           related_schema: "Customer",
+           related_module_name: "Customer",
+           related_table: "customers",
+           queryable: :customers,
+           field: :customer,
+           owner_key: :customer_id,
+           related_key: :id,
+           join_type: :inner,
+           is_through: false,
+           constraint_name: "orders_customer_id_fkey"
+         }
+       },
+       columns: %{},
+       source: :mariadb
+     }}
+  end
+end
+
 defmodule SelectoMixTest do
   use ExUnit.Case
   doctest SelectoMix
@@ -288,6 +415,69 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "def source_table, do: \"orders\"")
       assert String.contains?(result, "def adapter_module, do: SelectoDBMSSQL.Adapter")
       assert String.contains?(result, "mix selecto.gen.domain --adapter mssql --table orders")
+    end
+
+    test "schema introspector and domain generator support sqlite db sources" do
+      source = {:db, SelectoDBSQLite.Adapter, :fake_conn, "orders", schema: "public"}
+
+      config =
+        SchemaIntrospector.introspect_schema(source, schema: "public", include_associations: true)
+
+      assert config.table_name == "orders"
+      assert config.primary_key == :id
+      assert config.source == :sqlite
+      assert config.source_type == :db
+      assert config.adapter == SelectoDBSQLite.Adapter
+
+      result = DomainGenerator.generate_domain_file(source, config, app_name: "Shop")
+
+      assert String.contains?(result, "defmodule Shop.SelectoDomains.OrderDomain")
+      assert String.contains?(result, "def adapter_module, do: SelectoDBSQLite.Adapter")
+      assert String.contains?(result, "mix selecto.gen.domain --adapter sqlite --table orders")
+    end
+
+    test "schema introspector and domain generator support mysql db sources" do
+      source = {:db, SelectoDBMySQL.Adapter, :fake_conn, "orders", schema: "shop_dev"}
+
+      config =
+        SchemaIntrospector.introspect_schema(source,
+          schema: "shop_dev",
+          include_associations: true
+        )
+
+      assert config.table_name == "orders"
+      assert config.primary_key == :id
+      assert config.source == :mysql
+      assert config.source_type == :db
+      assert config.adapter == SelectoDBMySQL.Adapter
+
+      result = DomainGenerator.generate_domain_file(source, config, app_name: "Shop")
+
+      assert String.contains?(result, "defmodule Shop.SelectoDomains.OrderDomain")
+      assert String.contains?(result, "def adapter_module, do: SelectoDBMySQL.Adapter")
+      assert String.contains?(result, "mix selecto.gen.domain --adapter mysql --table orders")
+    end
+
+    test "schema introspector and domain generator support mariadb db sources" do
+      source = {:db, SelectoDBMariaDB.Adapter, :fake_conn, "orders", schema: "shop_dev"}
+
+      config =
+        SchemaIntrospector.introspect_schema(source,
+          schema: "shop_dev",
+          include_associations: true
+        )
+
+      assert config.table_name == "orders"
+      assert config.primary_key == :id
+      assert config.source == :mariadb
+      assert config.source_type == :db
+      assert config.adapter == SelectoDBMariaDB.Adapter
+
+      result = DomainGenerator.generate_domain_file(source, config, app_name: "Shop")
+
+      assert String.contains?(result, "defmodule Shop.SelectoDomains.OrderDomain")
+      assert String.contains?(result, "def adapter_module, do: SelectoDBMariaDB.Adapter")
+      assert String.contains?(result, "mix selecto.gen.domain --adapter mariadb --table orders")
     end
 
     test "connection opts parse convenience flags" do
