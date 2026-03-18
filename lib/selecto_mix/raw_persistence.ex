@@ -812,10 +812,33 @@ defmodule SelectoMix.RawPersistence do
       defp normalize_column_value(_column, value), do: value
 
       defp atomize_keys(map) when is_map(map) do
-        Enum.into(map, %{}, fn
-          {k, v} when is_binary(k) -> {String.to_atom(k), v}
+        allowed_keys = %{
+          "id" => :id,
+          "name" => :name,
+          "description" => :description,
+          "domain" => :domain,
+          "filters" => :filters,
+          "user_id" => :user_id,
+          "is_default" => :is_default,
+          "is_shared" => :is_shared,
+          "is_system" => :is_system,
+          "usage_count" => :usage_count,
+          "inserted_at" => :inserted_at,
+          "updated_at" => :updated_at
+        }
+
+        map
+        |> Enum.map(fn
+          {k, v} when is_binary(k) ->
+            case Map.get(allowed_keys, k) do
+              nil -> nil
+              allowed_key -> {allowed_key, v}
+            end
+
           {k, v} -> {k, v}
         end)
+        |> Enum.reject(&is_nil/1)
+        |> Map.new()
       end
 
       defp stringify_keys(map) when is_map(map) do
