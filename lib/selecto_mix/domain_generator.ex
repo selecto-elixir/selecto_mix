@@ -182,8 +182,8 @@ defmodule SelectoMix.DomainGenerator do
       "      # Query pagination settings\n" <>
       "      pagination: #{generate_pagination_config(config)},\n" <>
       "      \n" <>
-      "      # Pivot table configuration (Selecto 0.3.0+)\n" <>
-      "      pivot: #{generate_pivot_config(config)},\n      \n" <>
+      "      # Retarget table configuration (Selecto 0.3.0+)\n" <>
+      "      retarget: #{generate_retarget_config(config)},\n      \n" <>
       "      # Join configurations\n" <>
       "      joins: #{generate_joins_config(config)}#{custom_metadata}\n    }"
   end
@@ -1036,7 +1036,7 @@ defmodule SelectoMix.DomainGenerator do
       "      }"
   end
 
-  defp generate_pivot_config(_config) do
+  defp generate_retarget_config(_config) do
     "%{}"
   end
 
