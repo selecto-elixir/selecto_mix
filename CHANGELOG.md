@@ -1,7 +1,7 @@
 CHANGES
 =======
 
-Unreleased
+V 0.4.2
 ----------
 
 - Added `mix selecto.gen.domain` support for `--view`,
@@ -25,6 +25,10 @@ Unreleased
   `mix selecto.gen.domain` regeneration instead of dropping custom UDF specs.
 - Added commented `deffunction` examples to generated overlay templates for
   scalar and table UDF registrations.
+- Updated installer dependency baselines and README guidance for the coordinated
+  ecosystem release, keeping generated Selecto dependency ranges broad
+  (`>= ... and < 0.5.0`) instead of pin-like exact versions.
+- Bump package version to `0.4.2`.
 
 V 0.4.1
 --------
