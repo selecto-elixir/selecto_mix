@@ -26,6 +26,7 @@ defmodule SelectoMix do
   - `mix selecto.gen.exported_views` - Generate exported iframe view persistence
   - `mix selecto.gen.filter_sets` - Generate filter set persistence
   - `mix selecto.domain.export` - Export normalized domain JSON artifacts
+  - `mix selecto.domain.check` - Check normalized domain JSON artifacts
 
   ## Getting Started
 

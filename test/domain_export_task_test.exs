@@ -97,6 +97,36 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "checks an exported normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_check", fn ->
+      Mix.Task.reenable("selecto.domain.check")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Check.run(["demo.normalized.json"])
+        end)
+
+      assert output =~ "Checked normalized domain JSON: demo.normalized.json"
+      assert output =~ "Format: selecto.normalized_domain v1"
+      assert output =~ "Domain module: #{inspect(DemoDomain)}"
+      assert output =~ "Schema version: 1"
+      assert output =~ "Diagnostics: 0 errors, 0 warnings"
+    end)
+  end
+
+  test "raises a clear error for an unexpected artifact format" do
+    in_tmp_dir("selecto_mix_domain_check_bad_format", fn ->
+      Mix.Task.reenable("selecto.domain.check")
+      File.write!("bad.json", Jason.encode!(%{"format" => "other", "format_version" => 1}))
+
+      assert_raise Mix.Error, ~r/Unexpected normalized domain artifact format "other"/, fn ->
+        Mix.Tasks.Selecto.Domain.Check.run(["bad.json"])
+      end
+    end)
+  end
+
   test "raises a clear error when the domain module cannot be loaded" do
     Mix.Task.reenable("selecto.domain.export")
 

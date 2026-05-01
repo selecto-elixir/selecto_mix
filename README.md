@@ -90,6 +90,7 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.add_timeouts`
 - `mix selecto.validate.parameterized_joins`
 - `mix selecto.domain.export`
+- `mix selecto.domain.check`
 
 Export a normalized domain JSON artifact:
 
@@ -99,6 +100,12 @@ mix selecto.domain.export MyApp.SelectoDomains.ProductDomain --output priv/selec
 
 Runtime-only values such as function captures are emitted as explicit
 placeholder metadata so the artifact remains JSON-safe for tools.
+
+Check an exported artifact without loading the original domain module:
+
+```bash
+mix selecto.domain.check priv/selecto/product.normalized.json
+```
 
 ## UDF Workflow
 

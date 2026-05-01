@@ -46,7 +46,7 @@ defmodule Mix.Tasks.Selecto.Domain.Export do
         write_artifact(artifact, opts)
 
       {:error, reason} ->
-        Mix.raise(format_error(reason))
+        Mix.raise(DomainExport.format_error(reason))
     end
   end
 
@@ -74,25 +74,5 @@ defmodule Mix.Tasks.Selecto.Domain.Export do
       {switch, value} -> "#{switch} #{value}"
     end)
     |> Enum.join(", ")
-  end
-
-  defp format_error(:selecto_domain_unavailable) do
-    "Selecto.Domain.normalize/1 is unavailable. Add or load the selecto dependency for this project."
-  end
-
-  defp format_error({:module_not_loaded, module}) do
-    "Domain module #{inspect(module)} could not be loaded"
-  end
-
-  defp format_error({:missing_domain_function, module}) do
-    "Domain module #{inspect(module)} must export domain/0"
-  end
-
-  defp format_error({:normalization_failed, diagnostics}) do
-    "Domain normalization failed: #{inspect(diagnostics)}"
-  end
-
-  defp format_error({:invalid_normalizer_result, result}) do
-    "Selecto.Domain.normalize/1 returned an unexpected result: #{inspect(result)}"
   end
 end

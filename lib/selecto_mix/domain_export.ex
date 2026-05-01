@@ -17,7 +17,17 @@ defmodule SelectoMix.DomainExport do
           | {:normalization_failed, term()}
           | {:invalid_normalizer_result, term()}
 
-  @spec export(String.t() | module(), keyword()) :: {:ok, map()} | {:error, export_error()}
+  @type artifact_error ::
+          export_error()
+          | {:read_failed, Path.t(), term()}
+          | {:decode_failed, Path.t(), term()}
+          | :invalid_artifact
+          | {:invalid_artifact_format, term()}
+          | {:unsupported_artifact_version, term()}
+          | :missing_artifact_domain
+          | {:invalid_artifact_domain, term()}
+
+  @spec export(String.t() | module(), keyword()) :: {:ok, map()} | {:error, artifact_error()}
   def export(domain_module, opts \\ []) do
     normalizer = Keyword.get(opts, :normalizer, Selecto.Domain)
 
@@ -26,8 +36,35 @@ defmodule SelectoMix.DomainExport do
          {:ok, domain} <- domain_from_module(module),
          {:ok, normalized, diagnostics} <- normalize_domain(domain, normalizer),
          artifact <- artifact(module, normalized, diagnostics),
-         :ok <- round_trip_artifact(artifact, normalizer) do
+         {:ok, _check} <- round_trip_artifact(artifact, normalizer) do
       {:ok, artifact}
+    end
+  end
+
+  @spec check_file(Path.t(), keyword()) :: {:ok, map()} | {:error, artifact_error()}
+  def check_file(path, opts \\ []) do
+    with {:ok, contents} <- read_artifact(path),
+         {:ok, artifact} <- decode_artifact(contents, path),
+         {:ok, check} <- check_artifact(artifact, opts) do
+      {:ok, Map.put(check, :path, path)}
+    end
+  end
+
+  @spec check_artifact(map(), keyword()) :: {:ok, map()} | {:error, artifact_error()}
+  def check_artifact(artifact, opts \\ []) do
+    normalizer = Keyword.get(opts, :normalizer, Selecto.Domain)
+
+    with :ok <- validate_artifact_envelope(artifact),
+         {:ok, domain} <- artifact_domain(artifact),
+         {:ok, normalized, diagnostics} <- normalize_domain(domain, normalizer) do
+      {:ok,
+       %{
+         artifact: artifact,
+         domain_module: Map.get(artifact, "domain_module"),
+         schema_version: Map.get(artifact, "schema_version"),
+         normalized: normalized,
+         diagnostics: diagnostics
+       }}
     end
   end
 
@@ -35,6 +72,55 @@ defmodule SelectoMix.DomainExport do
   def encode!(artifact, opts \\ []) do
     pretty? = Keyword.get(opts, :pretty, true)
     Jason.encode!(artifact, pretty: pretty?)
+  end
+
+  @spec format_error(artifact_error()) :: String.t()
+  def format_error(:selecto_domain_unavailable) do
+    "Selecto.Domain.normalize/1 is unavailable. Add or load the selecto dependency for this project."
+  end
+
+  def format_error({:module_not_loaded, module}) do
+    "Domain module #{inspect(module)} could not be loaded"
+  end
+
+  def format_error({:missing_domain_function, module}) do
+    "Domain module #{inspect(module)} must export domain/0"
+  end
+
+  def format_error({:normalization_failed, diagnostics}) do
+    "Domain normalization failed: #{inspect(diagnostics)}"
+  end
+
+  def format_error({:invalid_normalizer_result, result}) do
+    "Selecto.Domain.normalize/1 returned an unexpected result: #{inspect(result)}"
+  end
+
+  def format_error({:read_failed, path, reason}) do
+    "Could not read normalized domain JSON #{path}: #{inspect(reason)}"
+  end
+
+  def format_error({:decode_failed, path, reason}) do
+    "Could not decode normalized domain JSON #{path}: #{Exception.message(reason)}"
+  end
+
+  def format_error(:invalid_artifact) do
+    "Normalized domain JSON artifact must be a JSON object"
+  end
+
+  def format_error({:invalid_artifact_format, format}) do
+    "Unexpected normalized domain artifact format #{inspect(format)}"
+  end
+
+  def format_error({:unsupported_artifact_version, version}) do
+    "Unsupported normalized domain artifact version #{inspect(version)}"
+  end
+
+  def format_error(:missing_artifact_domain) do
+    "Normalized domain JSON artifact is missing a domain object"
+  end
+
+  def format_error({:invalid_artifact_domain, domain}) do
+    "Normalized domain JSON artifact domain must be an object, got: #{inspect(domain)}"
   end
 
   defp domain_module(module) when is_atom(module), do: {:ok, module}
@@ -95,11 +181,47 @@ defmodule SelectoMix.DomainExport do
   defp round_trip_artifact(artifact, normalizer) do
     with {:ok, encoded} <- Jason.encode(artifact),
          {:ok, decoded} <- Jason.decode(encoded),
-         {:ok, _normalized, _diagnostics} <-
-           normalize_domain(Map.fetch!(decoded, "domain"), normalizer) do
-      :ok
+         {:ok, check} <- check_artifact(decoded, normalizer: normalizer) do
+      {:ok, check}
     else
-      {:error, reason} -> {:error, {:normalization_failed, reason}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp read_artifact(path) do
+    case File.read(path) do
+      {:ok, contents} -> {:ok, contents}
+      {:error, reason} -> {:error, {:read_failed, path, reason}}
+    end
+  end
+
+  defp decode_artifact(contents, path) do
+    case Jason.decode(contents) do
+      {:ok, artifact} -> {:ok, artifact}
+      {:error, reason} -> {:error, {:decode_failed, path, reason}}
+    end
+  end
+
+  defp validate_artifact_envelope(%{} = artifact) do
+    cond do
+      Map.get(artifact, "format") != @format ->
+        {:error, {:invalid_artifact_format, Map.get(artifact, "format")}}
+
+      Map.get(artifact, "format_version") != @format_version ->
+        {:error, {:unsupported_artifact_version, Map.get(artifact, "format_version")}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_artifact_envelope(_artifact), do: {:error, :invalid_artifact}
+
+  defp artifact_domain(artifact) do
+    case Map.fetch(artifact, "domain") do
+      {:ok, domain} when is_map(domain) -> {:ok, domain}
+      {:ok, domain} -> {:error, {:invalid_artifact_domain, domain}}
+      :error -> {:error, :missing_artifact_domain}
     end
   end
 
