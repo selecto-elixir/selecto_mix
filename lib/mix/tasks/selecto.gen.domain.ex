@@ -190,9 +190,16 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   @doc false
-  def artifact_guidance(domain_module, artifact_path, docs_path \\ nil, inspection_path \\ nil) do
+  def artifact_guidance(
+        domain_module,
+        artifact_path,
+        docs_path \\ nil,
+        inspection_path \\ nil,
+        diagram_path \\ nil
+      ) do
     docs_path = docs_path || default_docs_path(artifact_path)
     inspection_path = inspection_path || default_inspection_path(artifact_path)
+    diagram_path = diagram_path || default_diagram_path(artifact_path)
 
     """
 
@@ -201,6 +208,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       mix selecto.domain.check #{artifact_path}
       mix selecto.domain.inspect #{artifact_path}
       mix selecto.domain.describe #{artifact_path} --output #{inspection_path}
+      mix selecto.domain.diagram #{inspection_path} --output #{diagram_path}
       mix selecto.domain.docs #{artifact_path} --output #{docs_path}
     """
   end
@@ -1097,10 +1105,11 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     artifact_path = domain_artifact_path(source)
     docs_path = domain_docs_path(source)
     inspection_path = domain_inspection_path(source)
+    diagram_path = domain_diagram_path(source)
 
     Igniter.add_notice(
       igniter,
-      artifact_guidance(domain_module, artifact_path, docs_path, inspection_path)
+      artifact_guidance(domain_module, artifact_path, docs_path, inspection_path, diagram_path)
     )
   end
 
@@ -1116,6 +1125,10 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     Path.join(["priv", "selecto", "#{source_basename(source)}.inspection.json"])
   end
 
+  defp domain_diagram_path(source) do
+    Path.join(["docs", "selecto", "#{source_basename(source)}.diagram.mmd"])
+  end
+
   defp default_docs_path(artifact_path) do
     artifact_name = Path.basename(artifact_path, ".normalized.json")
     Path.join(["docs", "selecto", "#{artifact_name}.md"])
@@ -1124,6 +1137,11 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   defp default_inspection_path(artifact_path) do
     artifact_name = Path.basename(artifact_path, ".normalized.json")
     Path.join(["priv", "selecto", "#{artifact_name}.inspection.json"])
+  end
+
+  defp default_diagram_path(artifact_path) do
+    artifact_name = Path.basename(artifact_path, ".normalized.json")
+    Path.join(["docs", "selecto", "#{artifact_name}.diagram.mmd"])
   end
 
   defp add_route_suggestion(igniter, source, opts) do

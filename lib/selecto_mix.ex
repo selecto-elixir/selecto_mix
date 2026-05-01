@@ -18,6 +18,8 @@ defmodule SelectoMix do
     and round-trip checks
   - **Domain Inspection**: Generates Studio/tooling inspection JSON from
     normalized domain artifacts
+  - **Domain Diagrams**: Generates Mermaid diagrams from domain inspection
+    artifacts
   - **Domain Docs**: Generates Markdown references from normalized domain
     artifacts
 
@@ -33,6 +35,7 @@ defmodule SelectoMix do
   - `mix selecto.domain.check` - Check normalized domain JSON artifacts
   - `mix selecto.domain.inspect` - Inspect normalized domain JSON artifacts
   - `mix selecto.domain.describe` - Generate Studio/tooling inspection JSON from normalized artifacts
+  - `mix selecto.domain.diagram` - Generate Mermaid diagrams from domain inspection artifacts
   - `mix selecto.domain.diff` - Diff normalized domain JSON artifacts
   - `mix selecto.domain.docs` - Generate Markdown docs from normalized domain JSON artifacts
 

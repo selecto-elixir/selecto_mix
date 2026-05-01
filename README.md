@@ -13,6 +13,7 @@ Use it when you want to:
 - validate parameterized joins
 - export normalized domain JSON artifacts
 - generate Studio/tooling inspection JSON from normalized artifacts
+- generate Mermaid diagrams from domain inspection artifacts
 - generate Markdown docs from normalized domain JSON artifacts
 
 ## Installation
@@ -95,13 +96,14 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.domain.check`
 - `mix selecto.domain.inspect`
 - `mix selecto.domain.describe`
+- `mix selecto.domain.diagram`
 - `mix selecto.domain.diff`
 - `mix selecto.domain.docs`
 
 After `mix selecto.gen.domain` creates a domain, it prints the matching
-export/check/inspect/describe/docs follow-up commands with suggested
+export/check/inspect/describe/diagram/docs follow-up commands with suggested
 `priv/selecto/*.normalized.json`, `priv/selecto/*.inspection.json`, and
-`docs/selecto/*.md` artifact paths.
+`docs/selecto/*.diagram.mmd` / `docs/selecto/*.md` artifact paths.
 
 Export a normalized domain JSON artifact:
 
@@ -128,6 +130,12 @@ Generate Studio/tooling inspection JSON from the same artifact:
 
 ```bash
 mix selecto.domain.describe priv/selecto/product.normalized.json --output priv/selecto/product.inspection.json
+```
+
+Generate a Mermaid diagram from the inspection artifact:
+
+```bash
+mix selecto.domain.diagram priv/selecto/product.inspection.json --output docs/selecto/product.diagram.mmd
 ```
 
 Generate Markdown docs from the same artifact:

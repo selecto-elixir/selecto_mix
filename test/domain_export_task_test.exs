@@ -403,6 +403,86 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "generates Mermaid diagram from a Studio inspection JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_diagram", fn ->
+      Mix.Task.reenable("selecto.domain.diagram")
+
+      inspection_artifact = %{
+        "format" => "selecto.domain_inspection",
+        "format_version" => 1,
+        "source" => %{
+          "path" => "demo.normalized.json",
+          "domain_module" => inspect(DemoDomain),
+          "schema_version" => 1,
+          "name" => "Demo Items"
+        },
+        "inspection" => %{
+          "schema_version" => 1,
+          "name" => "Demo Items",
+          "registries" => %{
+            "source_fields" => ["customer_id", "id", "status"]
+          },
+          "source_relationships" => [
+            %{
+              "id" => "customer",
+              "target_domain" => "customers",
+              "source_field" => "customer_id",
+              "target_field" => "id",
+              "virtual_join_count" => 1,
+              "filters_count" => 1
+            }
+          ],
+          "choice_sources" => [
+            %{
+              "id" => "customer_choices",
+              "domain" => "customers",
+              "source_relationship" => "customer",
+              "value_field" => "id",
+              "label_field" => "name",
+              "filters_count" => 1,
+              "order_by_count" => 1,
+              "presentation" => %{"control" => "select"}
+            }
+          ],
+          "field_choice_bindings" => [
+            %{
+              "field" => "customer_id",
+              "choice_source" => "customer_choices",
+              "compact?" => true,
+              "reference?" => true
+            }
+          ]
+        },
+        "diagnostics" => %{"errors" => [], "warnings" => []}
+      }
+
+      File.write!("demo.inspection.json", Jason.encode!(inspection_artifact, pretty: true))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Diagram.run([
+            "demo.inspection.json",
+            "--output",
+            "docs/selecto/demo.diagram.mmd"
+          ])
+        end)
+
+      assert output =~ "Wrote normalized domain Mermaid diagram: docs/selecto/demo.diagram.mmd"
+
+      diagram = File.read!("docs/selecto/demo.diagram.mmd")
+
+      assert diagram =~ "flowchart LR"
+      assert diagram =~ "Domain: Demo Items\\nschema v1"
+      assert diagram =~ "Source relationship: customer"
+      assert diagram =~ "customer_id -> id"
+      assert diagram =~ "Choice source: customer_choices"
+      assert diagram =~ "picker: select"
+      assert diagram =~ "Picker field: customer_id"
+      assert diagram =~ "choice_customer_choices -. uses .-> rel_customer"
+      assert diagram =~ "binding_customer_id -. picker .-> choice_customer_choices"
+    end)
+  end
+
   test "diffs exported normalized domain JSON artifacts" do
     in_tmp_dir("selecto_mix_domain_diff", fn ->
       Mix.Task.reenable("selecto.domain.diff")
@@ -487,6 +567,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       Mix.Task.reenable("selecto.domain.diff")
       Mix.Task.reenable("selecto.domain.docs")
       Mix.Task.reenable("selecto.domain.describe")
+      Mix.Task.reenable("selecto.domain.diagram")
 
       assert {:ok, artifact} = SelectoMix.DomainExport.export(domain_module)
       File.write!("generated.normalized.json", SelectoMix.DomainExport.encode!(artifact))
@@ -546,6 +627,24 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert generated_inspection["format"] == "selecto.domain_inspection"
       assert generated_inspection["inspection"]["name"] == "GeneratedRoundTrip#{suffix} Domain"
       assert generated_inspection["inspection"]["counts"]["source_fields"] == 3
+
+      diagram_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Diagram.run([
+            "priv/selecto/generated.inspection.json",
+            "--output",
+            "docs/selecto/generated.diagram.mmd"
+          ])
+        end)
+
+      assert diagram_output =~
+               "Wrote normalized domain Mermaid diagram: docs/selecto/generated.diagram.mmd"
+
+      generated_diagram = File.read!("docs/selecto/generated.diagram.mmd")
+
+      assert generated_diagram =~ "flowchart LR"
+      assert generated_diagram =~ "Domain: GeneratedRoundTrip#{suffix} Domain"
+      assert generated_diagram =~ "Source fields"
 
       changed_artifact =
         update_in(artifact, ["domain", "filters"], fn filters ->
