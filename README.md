@@ -11,6 +11,7 @@ Use it when you want to:
 - scaffold saved views, exported views, and filter sets
 - install Selecto-related dependencies and front-end integration
 - validate parameterized joins
+- export normalized domain JSON artifacts
 
 ## Installation
 
@@ -88,6 +89,16 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.gen.live_dashboard`
 - `mix selecto.add_timeouts`
 - `mix selecto.validate.parameterized_joins`
+- `mix selecto.domain.export`
+
+Export a normalized domain JSON artifact:
+
+```bash
+mix selecto.domain.export MyApp.SelectoDomains.ProductDomain --output priv/selecto/product.normalized.json
+```
+
+Runtime-only values such as function captures are emitted as explicit
+placeholder metadata so the artifact remains JSON-safe for tools.
 
 ## UDF Workflow
 

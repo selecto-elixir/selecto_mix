@@ -14,6 +14,8 @@ defmodule SelectoMix do
   - **Igniter Integration**: Uses modern Elixir project modification tools
   - **Persistence Scaffolds**: Generates saved views, saved view configs,
     exported views, and filter set persistence modules
+  - **Domain Artifacts**: Exports normalized domain JSON artifacts for tools
+    and round-trip checks
 
   ## Main Mix Tasks
 
@@ -23,6 +25,7 @@ defmodule SelectoMix do
   - `mix selecto.gen.saved_view_configs` - Generate per-view-type saved config persistence
   - `mix selecto.gen.exported_views` - Generate exported iframe view persistence
   - `mix selecto.gen.filter_sets` - Generate filter set persistence
+  - `mix selecto.domain.export` - Export normalized domain JSON artifacts
 
   ## Getting Started
 
