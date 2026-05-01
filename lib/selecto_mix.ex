@@ -28,6 +28,7 @@ defmodule SelectoMix do
   - `mix selecto.domain.export` - Export normalized domain JSON artifacts
   - `mix selecto.domain.check` - Check normalized domain JSON artifacts
   - `mix selecto.domain.inspect` - Inspect normalized domain JSON artifacts
+  - `mix selecto.domain.diff` - Diff normalized domain JSON artifacts
 
   ## Getting Started
 

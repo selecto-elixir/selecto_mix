@@ -97,6 +97,45 @@ defmodule SelectoMix.DomainExport do
     }
   end
 
+  @spec diff_files(Path.t(), Path.t(), keyword()) :: {:ok, map()} | {:error, artifact_error()}
+  def diff_files(left_path, right_path, opts \\ []) do
+    with {:ok, left} <- summary_file(left_path, opts),
+         {:ok, right} <- summary_file(right_path, opts) do
+      {:ok, diff(left, right)}
+    end
+  end
+
+  @spec diff(map(), map()) :: map()
+  def diff(left, right) do
+    sections = diff_group(Map.fetch!(left, :sections), Map.fetch!(right, :sections))
+    counts = count_diff(Map.fetch!(left, :counts), Map.fetch!(right, :counts))
+    registries = diff_group(Map.fetch!(left, :registries), Map.fetch!(right, :registries))
+
+    diagnostics = %{
+      artifact:
+        diagnostic_summary_diff(
+          get_in(left, [:diagnostics, :artifact]) || %{},
+          get_in(right, [:diagnostics, :artifact]) || %{}
+        ),
+      current:
+        diagnostic_summary_diff(
+          get_in(left, [:diagnostics, :current]) || %{},
+          get_in(right, [:diagnostics, :current]) || %{}
+        )
+    }
+
+    diff = %{
+      left: diff_identity(left),
+      right: diff_identity(right),
+      sections: sections,
+      counts: counts,
+      registries: registries,
+      diagnostics: diagnostics
+    }
+
+    Map.put(diff, :changed?, diff_changed?(diff))
+  end
+
   @spec encode!(map(), keyword()) :: String.t()
   def encode!(artifact, opts \\ []) do
     pretty? = Keyword.get(opts, :pretty, true)
@@ -383,6 +422,104 @@ defmodule SelectoMix.DomainExport do
 
   defp list_or_empty(value) when is_list(value), do: value
   defp list_or_empty(_value), do: []
+
+  defp diff_identity(summary) do
+    %{
+      path: Map.get(summary, :path),
+      domain_module: Map.get(summary, :domain_module),
+      schema_version: Map.get(summary, :schema_version),
+      name: Map.get(summary, :name)
+    }
+  end
+
+  defp diff_group(left, right) do
+    left
+    |> diff_keys(right)
+    |> Map.new(fn key ->
+      {key, list_diff(Map.get(left, key, []), Map.get(right, key, []))}
+    end)
+  end
+
+  defp count_diff(left, right) do
+    left
+    |> diff_keys(right)
+    |> Map.new(fn key ->
+      left_value = numeric_value(Map.get(left, key, 0))
+      right_value = numeric_value(Map.get(right, key, 0))
+
+      {key, %{left: left_value, right: right_value, delta: right_value - left_value}}
+    end)
+  end
+
+  defp diagnostic_summary_diff(left, right) do
+    %{
+      errors: count_item_diff(left, right, :errors),
+      warnings: count_item_diff(left, right, :warnings),
+      error_codes: list_diff(Map.get(left, :error_codes, []), Map.get(right, :error_codes, [])),
+      warning_codes:
+        list_diff(Map.get(left, :warning_codes, []), Map.get(right, :warning_codes, []))
+    }
+  end
+
+  defp count_item_diff(left, right, key) do
+    left_value = numeric_value(Map.get(left, key, 0))
+    right_value = numeric_value(Map.get(right, key, 0))
+
+    %{left: left_value, right: right_value, delta: right_value - left_value}
+  end
+
+  defp list_diff(left, right) do
+    left_values = normalize_diff_list(left)
+    right_values = normalize_diff_list(right)
+
+    %{
+      added: right_values -- left_values,
+      removed: left_values -- right_values
+    }
+  end
+
+  defp normalize_diff_list(values) do
+    values
+    |> list_or_empty()
+    |> Enum.map(&to_string/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp diff_keys(left, right) do
+    left
+    |> Map.keys()
+    |> Kernel.++(Map.keys(right))
+    |> Enum.uniq()
+    |> Enum.sort_by(&to_string/1)
+  end
+
+  defp numeric_value(value) when is_number(value), do: value
+  defp numeric_value(_value), do: 0
+
+  defp diff_changed?(diff) do
+    changed_diff_group?(Map.fetch!(diff, :sections)) or
+      changed_count_diff?(Map.fetch!(diff, :counts)) or
+      changed_diff_group?(Map.fetch!(diff, :registries)) or
+      changed_diagnostics_diff?(Map.fetch!(diff, :diagnostics))
+  end
+
+  defp changed_diff_group?(group) do
+    Enum.any?(group, fn {_key, %{added: added, removed: removed}} ->
+      added != [] or removed != []
+    end)
+  end
+
+  defp changed_count_diff?(counts) do
+    Enum.any?(counts, fn {_key, %{delta: delta}} -> delta != 0 end)
+  end
+
+  defp changed_diagnostics_diff?(diagnostics) do
+    Enum.any?(diagnostics, fn {_kind, diff} ->
+      changed_count_diff?(Map.take(diff, [:errors, :warnings])) or
+        changed_diff_group?(Map.take(diff, [:error_codes, :warning_codes]))
+    end)
+  end
 
   defp json_value(%_struct{} = value) do
     value

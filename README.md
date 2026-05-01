@@ -92,6 +92,7 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.domain.export`
 - `mix selecto.domain.check`
 - `mix selecto.domain.inspect`
+- `mix selecto.domain.diff`
 
 Export a normalized domain JSON artifact:
 
@@ -112,6 +113,12 @@ Inspect the same artifact for a compact sections/counts/registries summary:
 
 ```bash
 mix selecto.domain.inspect priv/selecto/product.normalized.json
+```
+
+Diff two artifacts:
+
+```bash
+mix selecto.domain.diff priv/selecto/old.normalized.json priv/selecto/new.normalized.json
 ```
 
 ## UDF Workflow

@@ -152,6 +152,42 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "diffs exported normalized domain JSON artifacts" do
+    in_tmp_dir("selecto_mix_domain_diff", fn ->
+      Mix.Task.reenable("selecto.domain.diff")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+
+      changed_artifact =
+        artifact
+        |> update_in(["domain", "filters"], &Map.put(&1, "status", %{"type" => "string"}))
+        |> update_in(["domain", "joins"], &Map.delete(&1, "customer"))
+        |> update_in(["diagnostics", "unknown_sections"], &["future_section" | &1])
+        |> update_in(["diagnostics", "warnings"], &[%{"code" => "unknown_sections"} | &1])
+
+      File.write!("left.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+      File.write!("right.normalized.json", SelectoMix.DomainExport.encode!(changed_artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Diff.run([
+            "left.normalized.json",
+            "right.normalized.json"
+          ])
+        end)
+
+      assert output =~ "Normalized domain artifact diff"
+      assert output =~ "Left: left.normalized.json"
+      assert output =~ "Right: right.normalized.json"
+      assert output =~ "filters: 1 -> 2 (+1)"
+      assert output =~ "joins: 1 -> 0 (-1)"
+      assert output =~ "+ future_section"
+      assert output =~ "+ status"
+      assert output =~ "- customer"
+      assert output =~ "warnings: 0 -> 1 (+1)"
+      assert output =~ "+ unknown_sections"
+    end)
+  end
+
   test "raises a clear error for an unexpected artifact format" do
     in_tmp_dir("selecto_mix_domain_check_bad_format", fn ->
       Mix.Task.reenable("selecto.domain.check")
