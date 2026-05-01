@@ -94,6 +94,10 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.domain.inspect`
 - `mix selecto.domain.diff`
 
+After `mix selecto.gen.domain` creates a domain, it prints the matching
+export/check/inspect follow-up commands with a suggested
+`priv/selecto/*.normalized.json` artifact path.
+
 Export a normalized domain JSON artifact:
 
 ```bash

@@ -553,6 +553,20 @@ defmodule SelectoMixTest do
   end
 
   describe "adapter-backed helpers" do
+    test "gen.domain artifact guidance points to export check and inspect loop" do
+      guidance =
+        Mix.Tasks.Selecto.Gen.Domain.artifact_guidance(
+          "Shop.SelectoDomains.ProductDomain",
+          "priv/selecto/product.normalized.json"
+        )
+
+      assert guidance =~
+               "mix selecto.domain.export Shop.SelectoDomains.ProductDomain --output priv/selecto/product.normalized.json"
+
+      assert guidance =~ "mix selecto.domain.check priv/selecto/product.normalized.json"
+      assert guidance =~ "mix selecto.domain.inspect priv/selecto/product.normalized.json"
+    end
+
     test "adapter resolver accepts short adapter names" do
       assert {:ok, SelectoDBPostgreSQL.Adapter} = AdapterResolver.resolve("postgresql")
     end

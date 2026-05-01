@@ -189,6 +189,17 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     end
   end
 
+  @doc false
+  def artifact_guidance(domain_module, artifact_path) do
+    """
+
+    Domain artifact follow-up:
+      mix selecto.domain.export #{domain_module} --output #{artifact_path}
+      mix selecto.domain.check #{artifact_path}
+      mix selecto.domain.inspect #{artifact_path}
+    """
+  end
+
   # Private functions
 
   defp validate_flags(igniter, parsed_args) do
@@ -607,6 +618,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       |> generate_domain_file(source, domain_file, opts)
       |> generate_overlay_file(source, domain_file, opts)
       |> add_success_message("Generated Selecto domain for #{display_source(source)}")
+      |> add_artifact_guidance(source, opts)
 
     # Generate LiveView files if requested
     if opts[:live] && ecto_source?(source) do
@@ -1051,11 +1063,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   defp render_live_view_template(igniter, source, opts) do
     app_name = Igniter.Project.Application.app_name(igniter) |> to_string() |> Macro.camelize()
-
-    domain_config = SelectoMix.SchemaIntrospector.introspect_schema(source, Map.to_list(opts))
-
-    domain_module =
-      SelectoMix.DomainGenerator.domain_module_name(source, domain_config, app_name: app_name)
+    domain_module = domain_module_for_source(igniter, source, opts)
 
     LiveViewGenerator.render_live_view_template(
       app_name,
@@ -1072,12 +1080,26 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     |> Macro.underscore()
   end
 
-  defp add_route_suggestion(igniter, source, opts) do
+  defp domain_module_for_source(igniter, source, opts) do
     app_name = Igniter.Project.Application.app_name(igniter) |> to_string() |> Macro.camelize()
     domain_config = SelectoMix.SchemaIntrospector.introspect_schema(source, Map.to_list(opts))
 
-    domain_module =
-      SelectoMix.DomainGenerator.domain_module_name(source, domain_config, app_name: app_name)
+    SelectoMix.DomainGenerator.domain_module_name(source, domain_config, app_name: app_name)
+  end
+
+  defp add_artifact_guidance(igniter, source, opts) do
+    domain_module = domain_module_for_source(igniter, source, opts)
+    artifact_path = domain_artifact_path(source)
+
+    Igniter.add_notice(igniter, artifact_guidance(domain_module, artifact_path))
+  end
+
+  defp domain_artifact_path(source) do
+    Path.join(["priv", "selecto", "#{source_basename(source)}.normalized.json"])
+  end
+
+  defp add_route_suggestion(igniter, source, opts) do
+    domain_module = domain_module_for_source(igniter, source, opts)
 
     opts = Map.put(opts, :domain_module, domain_module)
 
