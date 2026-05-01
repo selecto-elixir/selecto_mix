@@ -1,3 +1,36 @@
+unless Code.ensure_loaded?(Selecto) do
+  defmodule Selecto do
+    def configure(domain, _connection, _opts \\ []), do: {:configured, domain}
+    def from_ecto(repo, schema, opts \\ []), do: {:from_ecto, repo, schema, opts}
+    def select(selecto, _fields), do: selecto
+    def filter(selecto, _filter), do: selecto
+    def execute(_selecto), do: {:ok, []}
+    def execute_one(_selecto), do: {:ok, nil}
+  end
+end
+
+unless Code.ensure_loaded?(Selecto.Config.Overlay) do
+  defmodule Selecto.Config.Overlay do
+    def merge(domain, overlay) when is_map(domain) and is_map(overlay),
+      do: Map.merge(domain, overlay)
+  end
+end
+
+unless Code.ensure_loaded?(Selecto.DomainValidator) do
+  defmodule Selecto.DomainValidator do
+    def validate_domain(_domain), do: :ok
+  end
+end
+
+unless Code.ensure_loaded?(Selecto.DomainValidator.ValidationError) do
+  defmodule Selecto.DomainValidator.ValidationError do
+    defexception [:errors]
+
+    @impl Exception
+    def message(%{errors: errors}), do: "Selecto domain validation failed: #{inspect(errors)}"
+  end
+end
+
 unless Code.ensure_loaded?(Selecto.Domain) do
   defmodule Selecto.Domain do
     def normalize(domain) when is_map(domain) do
@@ -26,6 +59,8 @@ defmodule SelectoMix.DomainExportTaskTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
+
+  alias SelectoMix.DomainGenerator
 
   defmodule DemoDomain do
     def domain do
@@ -185,6 +220,96 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "- customer"
       assert output =~ "warnings: 0 -> 1 (+1)"
       assert output =~ "+ unknown_sections"
+    end)
+  end
+
+  test "generated domain files round-trip through export check inspect and diff artifacts" do
+    in_tmp_dir("selecto_mix_generated_domain_round_trip", fn ->
+      suffix = System.unique_integer([:positive])
+      schema_module = Module.concat(["GeneratedRoundTrip#{suffix}"])
+
+      domain_module =
+        Module.concat(["TmpRoundTrip.SelectoDomains.GeneratedRoundTrip#{suffix}Domain"])
+
+      overlay_module =
+        Module.concat([
+          "TmpRoundTrip.SelectoDomains.Overlays.GeneratedRoundTrip#{suffix}DomainOverlay"
+        ])
+
+      config = %{
+        schema_module: schema_module,
+        table_name: "round_trip_items",
+        primary_key: :id,
+        fields: [:id, :name, :status],
+        field_types: %{id: :integer, name: :string, status: :string},
+        associations: %{},
+        suggested_defaults: %{
+          default_selected: [:name],
+          default_filters: %{"status" => %{type: :string}},
+          default_order: []
+        },
+        metadata: %{
+          module_name: "GeneratedRoundTrip#{suffix}",
+          context_name: "RoundTrip"
+        }
+      }
+
+      generated =
+        DomainGenerator.generate_domain_file(schema_module, config, app_name: "TmpRoundTrip")
+
+      Code.compile_string("""
+      defmodule #{inspect(overlay_module)} do
+        def overlay, do: %{}
+      end
+      """)
+
+      Code.compile_string(generated)
+      assert function_exported?(domain_module, :domain, 0)
+
+      Mix.Task.reenable("selecto.domain.check")
+      Mix.Task.reenable("selecto.domain.inspect")
+      Mix.Task.reenable("selecto.domain.diff")
+
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(domain_module)
+      File.write!("generated.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      check_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Check.run(["generated.normalized.json"])
+        end)
+
+      assert check_output =~ "Checked normalized domain JSON: generated.normalized.json"
+      assert check_output =~ "Schema version: 1"
+
+      inspect_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Inspect.run(["generated.normalized.json"])
+        end)
+
+      assert inspect_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
+      assert inspect_output =~ "source fields: 3"
+      assert inspect_output =~ "filters: status"
+
+      changed_artifact =
+        update_in(artifact, ["domain", "filters"], fn filters ->
+          Map.put(filters, "priority", %{"type" => "integer"})
+        end)
+
+      File.write!(
+        "generated.changed.normalized.json",
+        SelectoMix.DomainExport.encode!(changed_artifact)
+      )
+
+      diff_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Diff.run([
+            "generated.normalized.json",
+            "generated.changed.normalized.json"
+          ])
+        end)
+
+      assert diff_output =~ "filters: 1 -> 2 (+1)"
+      assert diff_output =~ "+ priority"
     end)
   end
 
