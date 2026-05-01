@@ -52,6 +52,141 @@ unless Code.ensure_loaded?(Selecto.Domain) do
     def normalize(_domain) do
       {:error, %{errors: [%{code: :invalid_domain}], warnings: []}}
     end
+
+    def describe(%{schema_version: schema_version, domain: domain}) when is_map(domain) do
+      source = map_get(domain, "source", %{})
+      filters = map_get(domain, "filters", %{})
+      functions = map_get(domain, "functions", %{})
+      joins = map_get(domain, "joins", %{})
+      source_relationships = map_get(domain, "source_relationships", %{})
+      choice_sources = map_get(domain, "choice_sources", %{})
+
+      {:ok,
+       %{
+         schema_version: schema_version,
+         name: map_get(domain, "name"),
+         sections: %{
+           canonical: [:source, :schemas, :joins, :filters, :functions, :published_views],
+           projection: [],
+           proposed: [],
+           unknown: []
+         },
+         diagnostics: %{
+           error_count: 0,
+           warning_count: 0,
+           error_codes: [],
+           warning_codes: [],
+           schema_version_inferred: false
+         },
+         projections: [:query, :write, :ui, :api, :query_contract],
+         counts: %{
+           source_fields: source |> map_get("fields", []) |> length_or_zero(),
+           schemas: domain |> map_get("schemas", %{}) |> map_size_or_zero(),
+           joins: map_size_or_zero(joins),
+           filters: map_size_or_zero(filters),
+           functions: map_size_or_zero(functions),
+           query_members: 0,
+           custom_columns: 0,
+           writes: %{operations: 0, fields: 0, transitions: 0, validations: 0, constraints: 0},
+           actions: domain |> map_get("actions", %{}) |> map_size_or_zero(),
+           capabilities: domain |> map_get("capabilities", %{}) |> map_size_or_zero(),
+           source_relationships: map_size_or_zero(source_relationships),
+           choice_sources: map_size_or_zero(choice_sources),
+           field_choice_bindings: 0,
+           warnings: 0,
+           errors: 0
+         },
+         registries: %{
+           source_fields: source |> map_get("fields", []) |> string_list(),
+           schemas: domain |> map_get("schemas", %{}) |> sorted_keys(),
+           schema_fields: %{},
+           joins: sorted_keys(joins),
+           filters: sorted_keys(filters),
+           functions: sorted_keys(functions),
+           query_members: [],
+           custom_columns: [],
+           actions: domain |> map_get("actions", %{}) |> sorted_keys(),
+           capabilities: domain |> map_get("capabilities", %{}) |> sorted_keys(),
+           source_relationships: sorted_keys(source_relationships),
+           choice_sources: sorted_keys(choice_sources)
+         },
+         writes: %{
+           operations: [],
+           fields: [],
+           transitions: [],
+           validations_count: 0,
+           constraints_count: 0
+         },
+         actions: [],
+         capabilities: [],
+         source_relationships: [],
+         choice_sources: [],
+         field_choice_bindings: []
+       },
+       %{errors: [], warnings: [], schema_version: schema_version, schema_version_inferred: false}}
+    end
+
+    def describe(domain) when is_map(domain) do
+      with {:ok, normalized, _diagnostics} <- normalize(domain) do
+        describe(normalized)
+      end
+    end
+
+    def describe(_domain) do
+      {:error, %{errors: [%{code: :invalid_domain}], warnings: []}}
+    end
+
+    defp map_get(map, key, default \\ nil)
+
+    defp map_get(map, key, default) when is_map(map) and is_binary(key) do
+      atom_key = existing_atom(key)
+
+      cond do
+        Map.has_key?(map, key) -> Map.get(map, key)
+        atom_key && Map.has_key?(map, atom_key) -> Map.get(map, atom_key)
+        true -> default
+      end
+    end
+
+    defp map_get(map, key, default) when is_map(map) and is_atom(key) do
+      string_key = Atom.to_string(key)
+
+      cond do
+        Map.has_key?(map, key) -> Map.get(map, key)
+        Map.has_key?(map, string_key) -> Map.get(map, string_key)
+        true -> default
+      end
+    end
+
+    defp map_get(_map, _key, default), do: default
+
+    defp sorted_keys(value) when is_map(value) do
+      value
+      |> Map.keys()
+      |> string_list()
+    end
+
+    defp sorted_keys(_value), do: []
+
+    defp string_list(values) when is_list(values) do
+      values
+      |> Enum.map(&to_string/1)
+      |> Enum.sort()
+    end
+
+    defp string_list(_values), do: []
+
+    defp length_or_zero(value) when is_list(value), do: length(value)
+    defp length_or_zero(_value), do: 0
+
+    defp map_size_or_zero(value) when is_map(value), do: map_size(value)
+    defp map_size_or_zero(_value), do: 0
+
+    defp existing_atom(value) do
+      String.to_existing_atom(value)
+    rescue
+      ArgumentError -> nil
+    end
   end
 end
 
@@ -222,6 +357,52 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "generates Studio inspection JSON from an exported normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_describe", fn ->
+      Mix.Task.reenable("selecto.domain.describe")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Describe.run([
+            "demo.normalized.json",
+            "--output",
+            "priv/selecto/demo.inspection.json"
+          ])
+        end)
+
+      assert output =~
+               "Wrote normalized domain inspection JSON: priv/selecto/demo.inspection.json"
+
+      inspection =
+        "priv/selecto/demo.inspection.json"
+        |> File.read!()
+        |> Jason.decode!()
+
+      assert inspection["format"] == "selecto.domain_inspection"
+      assert inspection["format_version"] == 1
+      assert inspection["source"]["path"] == "demo.normalized.json"
+      assert inspection["source"]["domain_module"] == inspect(DemoDomain)
+      assert inspection["source"]["name"] == "Demo Items"
+      assert inspection["inspection"]["name"] == "Demo Items"
+      assert inspection["inspection"]["counts"]["source_fields"] == 2
+      assert inspection["inspection"]["counts"]["filters"] == 1
+      assert inspection["inspection"]["registries"]["filters"] == ["name"]
+
+      assert inspection["inspection"]["projections"] == [
+               "query",
+               "write",
+               "ui",
+               "api",
+               "query_contract"
+             ]
+
+      assert inspection["diagnostics"]["errors"] == []
+      assert inspection["diagnostics"]["schema_version"] == 1
+    end)
+  end
+
   test "diffs exported normalized domain JSON artifacts" do
     in_tmp_dir("selecto_mix_domain_diff", fn ->
       Mix.Task.reenable("selecto.domain.diff")
@@ -305,6 +486,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       Mix.Task.reenable("selecto.domain.inspect")
       Mix.Task.reenable("selecto.domain.diff")
       Mix.Task.reenable("selecto.domain.docs")
+      Mix.Task.reenable("selecto.domain.describe")
 
       assert {:ok, artifact} = SelectoMix.DomainExport.export(domain_module)
       File.write!("generated.normalized.json", SelectoMix.DomainExport.encode!(artifact))
@@ -343,6 +525,27 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert generated_docs =~ "| Fields | id, name, status |"
       assert generated_docs =~ "### Filters"
       assert generated_docs =~ "| status |  | string |  |"
+
+      describe_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Describe.run([
+            "generated.normalized.json",
+            "--output",
+            "priv/selecto/generated.inspection.json"
+          ])
+        end)
+
+      assert describe_output =~
+               "Wrote normalized domain inspection JSON: priv/selecto/generated.inspection.json"
+
+      generated_inspection =
+        "priv/selecto/generated.inspection.json"
+        |> File.read!()
+        |> Jason.decode!()
+
+      assert generated_inspection["format"] == "selecto.domain_inspection"
+      assert generated_inspection["inspection"]["name"] == "GeneratedRoundTrip#{suffix} Domain"
+      assert generated_inspection["inspection"]["counts"]["source_fields"] == 3
 
       changed_artifact =
         update_in(artifact, ["domain", "filters"], fn filters ->

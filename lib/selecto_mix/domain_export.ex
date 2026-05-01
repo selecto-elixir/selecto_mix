@@ -142,6 +142,9 @@ defmodule SelectoMix.DomainExport do
     Jason.encode!(artifact, pretty: pretty?)
   end
 
+  @spec json_safe(term()) :: term()
+  def json_safe(value), do: json_value(value)
+
   @spec format_error(artifact_error()) :: String.t()
   def format_error(:selecto_domain_unavailable) do
     "Selecto.Domain.normalize/1 is unavailable. Add or load the selecto dependency for this project."

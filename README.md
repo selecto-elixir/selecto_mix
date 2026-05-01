@@ -12,6 +12,7 @@ Use it when you want to:
 - install Selecto-related dependencies and front-end integration
 - validate parameterized joins
 - export normalized domain JSON artifacts
+- generate Studio/tooling inspection JSON from normalized artifacts
 - generate Markdown docs from normalized domain JSON artifacts
 
 ## Installation
@@ -93,12 +94,14 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.domain.export`
 - `mix selecto.domain.check`
 - `mix selecto.domain.inspect`
+- `mix selecto.domain.describe`
 - `mix selecto.domain.diff`
 - `mix selecto.domain.docs`
 
 After `mix selecto.gen.domain` creates a domain, it prints the matching
-export/check/inspect/docs follow-up commands with suggested
-`priv/selecto/*.normalized.json` and `docs/selecto/*.md` artifact paths.
+export/check/inspect/describe/docs follow-up commands with suggested
+`priv/selecto/*.normalized.json`, `priv/selecto/*.inspection.json`, and
+`docs/selecto/*.md` artifact paths.
 
 Export a normalized domain JSON artifact:
 
@@ -119,6 +122,12 @@ Inspect the same artifact for a compact sections/counts/registries summary:
 
 ```bash
 mix selecto.domain.inspect priv/selecto/product.normalized.json
+```
+
+Generate Studio/tooling inspection JSON from the same artifact:
+
+```bash
+mix selecto.domain.describe priv/selecto/product.normalized.json --output priv/selecto/product.inspection.json
 ```
 
 Generate Markdown docs from the same artifact:
