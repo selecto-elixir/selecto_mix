@@ -564,6 +564,7 @@ defmodule SelectoMixTest do
                "mix selecto.domain.export Shop.SelectoDomains.ProductDomain --output priv/selecto/product.normalized.json"
 
       assert guidance =~ "mix selecto.domain.check priv/selecto/product.normalized.json"
+      assert guidance =~ "mix selecto.domain.import priv/selecto/product.normalized.json --check"
       assert guidance =~ "mix selecto.domain.inspect priv/selecto/product.normalized.json"
 
       assert guidance =~

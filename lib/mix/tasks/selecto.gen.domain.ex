@@ -206,6 +206,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     Domain artifact follow-up:
       mix selecto.domain.export #{domain_module} --output #{artifact_path}
       mix selecto.domain.check #{artifact_path}
+      mix selecto.domain.import #{artifact_path} --check
       mix selecto.domain.inspect #{artifact_path}
       mix selecto.domain.describe #{artifact_path} --output #{inspection_path}
       mix selecto.domain.diagram #{inspection_path} --output #{diagram_path}

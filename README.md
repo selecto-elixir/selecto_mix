@@ -12,6 +12,7 @@ Use it when you want to:
 - install Selecto-related dependencies and front-end integration
 - validate parameterized joins
 - export normalized domain JSON artifacts
+- check non-writing import plans for normalized domain JSON artifacts
 - generate Studio/tooling inspection JSON from normalized artifacts
 - generate Mermaid diagrams from domain inspection artifacts
 - generate Markdown docs from normalized domain JSON artifacts
@@ -94,6 +95,7 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.validate.parameterized_joins`
 - `mix selecto.domain.export`
 - `mix selecto.domain.check`
+- `mix selecto.domain.import`
 - `mix selecto.domain.inspect`
 - `mix selecto.domain.describe`
 - `mix selecto.domain.diagram`
@@ -101,9 +103,9 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.domain.docs`
 
 After `mix selecto.gen.domain` creates a domain, it prints the matching
-export/check/inspect/describe/diagram/docs follow-up commands with suggested
-`priv/selecto/*.normalized.json`, `priv/selecto/*.inspection.json`, and
-`docs/selecto/*.diagram.mmd` / `docs/selecto/*.md` artifact paths.
+export/check/import/inspect/describe/diagram/docs follow-up commands with
+suggested `priv/selecto/*.normalized.json`, `priv/selecto/*.inspection.json`,
+and `docs/selecto/*.diagram.mmd` / `docs/selecto/*.md` artifact paths.
 
 Export a normalized domain JSON artifact:
 
@@ -118,6 +120,12 @@ Check an exported artifact without loading the original domain module:
 
 ```bash
 mix selecto.domain.check priv/selecto/product.normalized.json
+```
+
+Preview the current non-writing import/readback plan:
+
+```bash
+mix selecto.domain.import priv/selecto/product.normalized.json --check
 ```
 
 Inspect the same artifact for a compact sections/counts/registries summary:

@@ -296,6 +296,62 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "checks a non-writing import plan for an exported normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_import_check", fn ->
+      Mix.Task.reenable("selecto.domain.import")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Import.run(["demo.normalized.json", "--check"])
+        end)
+
+      assert output =~ "Checked normalized domain import plan: demo.normalized.json"
+      assert output =~ "Mode: check (no files written)"
+      assert output =~ "Name: Demo Items"
+      assert output =~ "source: 1 (reconstructable)"
+      assert output =~ "published_views: 1 (partial_runtime_placeholders)"
+      assert output =~ "Runtime placeholders: 1"
+      assert output =~ "function: 1"
+      assert output =~ "domain.published_views.demo_rollup.query (function)"
+      assert output =~ "artifact: 0 errors, 0 warnings"
+      assert output =~ "current: 0 errors, 0 warnings"
+      assert output =~ "Write status: not_implemented"
+
+      json_output =
+        capture_io(fn ->
+          Mix.Task.reenable("selecto.domain.import")
+
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "demo.normalized.json",
+            "--check",
+            "--format",
+            "json"
+          ])
+        end)
+
+      plan = Jason.decode!(json_output)
+
+      assert plan["format"] == "selecto.domain_import_plan"
+      assert plan["mode"] == "check"
+      assert plan["source"]["name"] == "Demo Items"
+      assert plan["runtime_placeholders"]["count"] == 1
+      assert plan["write"]["status"] == "not_implemented"
+    end)
+  end
+
+  test "refuses normalized domain import writes until write semantics exist" do
+    in_tmp_dir("selecto_mix_domain_import_refuses_writes", fn ->
+      Mix.Task.reenable("selecto.domain.import")
+      File.write!("demo.normalized.json", Jason.encode!(%{}))
+
+      assert_raise Mix.Error, ~r/Writing normalized domain imports is not implemented yet/, fn ->
+        Mix.Tasks.Selecto.Domain.Import.run(["demo.normalized.json"])
+      end
+    end)
+  end
+
   test "inspects an exported normalized domain JSON artifact" do
     in_tmp_dir("selecto_mix_domain_inspect", fn ->
       Mix.Task.reenable("selecto.domain.inspect")
@@ -563,6 +619,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert function_exported?(domain_module, :domain, 0)
 
       Mix.Task.reenable("selecto.domain.check")
+      Mix.Task.reenable("selecto.domain.import")
       Mix.Task.reenable("selecto.domain.inspect")
       Mix.Task.reenable("selecto.domain.diff")
       Mix.Task.reenable("selecto.domain.docs")
@@ -579,6 +636,15 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert check_output =~ "Checked normalized domain JSON: generated.normalized.json"
       assert check_output =~ "Schema version: 1"
+
+      import_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Import.run(["generated.normalized.json", "--check"])
+        end)
+
+      assert import_output =~ "Checked normalized domain import plan: generated.normalized.json"
+      assert import_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
+      assert import_output =~ "source: 1 (reconstructable)"
 
       inspect_output =
         capture_io(fn ->
