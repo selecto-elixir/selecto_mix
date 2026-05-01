@@ -190,13 +190,16 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   @doc false
-  def artifact_guidance(domain_module, artifact_path) do
+  def artifact_guidance(domain_module, artifact_path, docs_path \\ nil) do
+    docs_path = docs_path || default_docs_path(artifact_path)
+
     """
 
     Domain artifact follow-up:
       mix selecto.domain.export #{domain_module} --output #{artifact_path}
       mix selecto.domain.check #{artifact_path}
       mix selecto.domain.inspect #{artifact_path}
+      mix selecto.domain.docs #{artifact_path} --output #{docs_path}
     """
   end
 
@@ -1090,12 +1093,22 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   defp add_artifact_guidance(igniter, source, opts) do
     domain_module = domain_module_for_source(igniter, source, opts)
     artifact_path = domain_artifact_path(source)
+    docs_path = domain_docs_path(source)
 
-    Igniter.add_notice(igniter, artifact_guidance(domain_module, artifact_path))
+    Igniter.add_notice(igniter, artifact_guidance(domain_module, artifact_path, docs_path))
   end
 
   defp domain_artifact_path(source) do
     Path.join(["priv", "selecto", "#{source_basename(source)}.normalized.json"])
+  end
+
+  defp domain_docs_path(source) do
+    Path.join(["docs", "selecto", "#{source_basename(source)}.md"])
+  end
+
+  defp default_docs_path(artifact_path) do
+    artifact_name = Path.basename(artifact_path, ".normalized.json")
+    Path.join(["docs", "selecto", "#{artifact_name}.md"])
   end
 
   defp add_route_suggestion(igniter, source, opts) do

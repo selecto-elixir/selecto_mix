@@ -16,6 +16,8 @@ defmodule SelectoMix do
     exported views, and filter set persistence modules
   - **Domain Artifacts**: Exports normalized domain JSON artifacts for tools
     and round-trip checks
+  - **Domain Docs**: Generates Markdown references from normalized domain
+    artifacts
 
   ## Main Mix Tasks
 
@@ -29,6 +31,7 @@ defmodule SelectoMix do
   - `mix selecto.domain.check` - Check normalized domain JSON artifacts
   - `mix selecto.domain.inspect` - Inspect normalized domain JSON artifacts
   - `mix selecto.domain.diff` - Diff normalized domain JSON artifacts
+  - `mix selecto.domain.docs` - Generate Markdown docs from normalized domain JSON artifacts
 
   ## Getting Started
 

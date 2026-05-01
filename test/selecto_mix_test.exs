@@ -565,6 +565,9 @@ defmodule SelectoMixTest do
 
       assert guidance =~ "mix selecto.domain.check priv/selecto/product.normalized.json"
       assert guidance =~ "mix selecto.domain.inspect priv/selecto/product.normalized.json"
+
+      assert guidance =~
+               "mix selecto.domain.docs priv/selecto/product.normalized.json --output docs/selecto/product.md"
     end
 
     test "adapter resolver accepts short adapter names" do

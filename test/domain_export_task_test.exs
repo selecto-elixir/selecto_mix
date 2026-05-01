@@ -187,6 +187,41 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "generates Markdown docs from an exported normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_docs", fn ->
+      Mix.Task.reenable("selecto.domain.docs")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Docs.run([
+            "demo.normalized.json",
+            "--output",
+            "docs/selecto/demo.md"
+          ])
+        end)
+
+      assert output =~ "Wrote normalized domain Markdown docs: docs/selecto/demo.md"
+
+      docs = File.read!("docs/selecto/demo.md")
+
+      assert docs =~ "# Demo Items"
+      assert docs =~ "| Domain module | #{inspect(DemoDomain)} |"
+      assert docs =~ "## Source"
+      assert docs =~ "| Table | demo_items |"
+      assert docs =~ "| id | integer | ID |"
+      assert docs =~ "| name | string | Name |"
+      assert docs =~ "## Registries"
+      assert docs =~ "### Filters"
+      assert docs =~ "| name |  | string |  |"
+      assert docs =~ "### Published Views"
+      assert docs =~ "| demo_rollup |  | view |  |"
+      assert docs =~ "## Diagnostics"
+      assert docs =~ "| Current | 0 | 0 | (none) | (none) |"
+    end)
+  end
+
   test "diffs exported normalized domain JSON artifacts" do
     in_tmp_dir("selecto_mix_domain_diff", fn ->
       Mix.Task.reenable("selecto.domain.diff")
@@ -269,6 +304,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       Mix.Task.reenable("selecto.domain.check")
       Mix.Task.reenable("selecto.domain.inspect")
       Mix.Task.reenable("selecto.domain.diff")
+      Mix.Task.reenable("selecto.domain.docs")
 
       assert {:ok, artifact} = SelectoMix.DomainExport.export(domain_module)
       File.write!("generated.normalized.json", SelectoMix.DomainExport.encode!(artifact))
@@ -289,6 +325,24 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert inspect_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
       assert inspect_output =~ "source fields: 3"
       assert inspect_output =~ "filters: status"
+
+      docs_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Docs.run([
+            "generated.normalized.json",
+            "--output",
+            "docs/selecto/generated.md"
+          ])
+        end)
+
+      assert docs_output =~ "Wrote normalized domain Markdown docs: docs/selecto/generated.md"
+
+      generated_docs = File.read!("docs/selecto/generated.md")
+
+      assert generated_docs =~ "# GeneratedRoundTrip#{suffix} Domain"
+      assert generated_docs =~ "| Fields | id, name, status |"
+      assert generated_docs =~ "### Filters"
+      assert generated_docs =~ "| status |  | string |  |"
 
       changed_artifact =
         update_in(artifact, ["domain", "filters"], fn filters ->
