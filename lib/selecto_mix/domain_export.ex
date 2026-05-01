@@ -68,6 +68,35 @@ defmodule SelectoMix.DomainExport do
     end
   end
 
+  @spec summary_file(Path.t(), keyword()) :: {:ok, map()} | {:error, artifact_error()}
+  def summary_file(path, opts \\ []) do
+    with {:ok, check} <- check_file(path, opts) do
+      {:ok, summary(check)}
+    end
+  end
+
+  @spec summary(map()) :: map()
+  def summary(%{artifact: artifact, diagnostics: current_diagnostics} = check) do
+    domain = Map.get(artifact, "domain", %{})
+    artifact_diagnostics = Map.get(artifact, "diagnostics", %{})
+
+    %{
+      path: Map.get(check, :path),
+      format: Map.get(artifact, "format"),
+      format_version: Map.get(artifact, "format_version"),
+      domain_module: Map.get(artifact, "domain_module"),
+      schema_version: Map.get(artifact, "schema_version"),
+      name: map_get(domain, "name"),
+      sections: sections_summary(artifact_diagnostics, current_diagnostics),
+      counts: counts_summary(domain),
+      registries: registries_summary(domain),
+      diagnostics: %{
+        artifact: diagnostics_summary(artifact_diagnostics),
+        current: diagnostics_summary(current_diagnostics)
+      }
+    }
+  end
+
   @spec encode!(map(), keyword()) :: String.t()
   def encode!(artifact, opts \\ []) do
     pretty? = Keyword.get(opts, :pretty, true)
@@ -225,6 +254,136 @@ defmodule SelectoMix.DomainExport do
     end
   end
 
+  defp sections_summary(artifact_diagnostics, current_diagnostics) do
+    %{
+      canonical: diagnostic_list(artifact_diagnostics, :canonical_sections, current_diagnostics),
+      projection:
+        diagnostic_list(artifact_diagnostics, :projection_sections, current_diagnostics),
+      proposed: diagnostic_list(artifact_diagnostics, :proposed_sections, current_diagnostics),
+      unknown: diagnostic_list(artifact_diagnostics, :unknown_sections, current_diagnostics)
+    }
+  end
+
+  defp diagnostic_list(diagnostics, key, fallback_diagnostics) do
+    case diagnostic_value(diagnostics, key, nil) do
+      nil -> diagnostic_value(fallback_diagnostics, key, [])
+      value -> value
+    end
+    |> list_or_empty()
+    |> Enum.map(&to_string/1)
+  end
+
+  defp counts_summary(domain) do
+    query_members = map_get(domain, "query_members", %{})
+
+    %{
+      source_fields: domain |> map_get("source", %{}) |> map_get("fields", []) |> count_list(),
+      source_columns: domain |> map_get("source", %{}) |> map_get("columns", %{}) |> count_map(),
+      schemas: domain |> map_get("schemas", %{}) |> count_map(),
+      joins: domain |> map_get("joins", %{}) |> count_map(),
+      filters: domain |> map_get("filters", %{}) |> count_map(),
+      functions: domain |> map_get("functions", %{}) |> count_map(),
+      query_members: count_query_members(query_members),
+      published_views: domain |> map_get("published_views", %{}) |> count_map(),
+      source_relationships: domain |> map_get("source_relationships", %{}) |> count_map(),
+      choice_sources: domain |> map_get("choice_sources", %{}) |> count_map()
+    }
+  end
+
+  defp registries_summary(domain) do
+    %{
+      joins: registry_names(domain, "joins"),
+      filters: registry_names(domain, "filters"),
+      functions: registry_names(domain, "functions"),
+      query_members: query_member_names(map_get(domain, "query_members", %{})),
+      published_views: registry_names(domain, "published_views"),
+      source_relationships: registry_names(domain, "source_relationships"),
+      choice_sources: registry_names(domain, "choice_sources")
+    }
+  end
+
+  defp diagnostics_summary(diagnostics) do
+    errors = diagnostic_items(diagnostics, :errors)
+    warnings = diagnostic_items(diagnostics, :warnings)
+
+    %{
+      errors: length(errors),
+      warnings: length(warnings),
+      error_codes: diagnostic_codes(errors),
+      warning_codes: diagnostic_codes(warnings)
+    }
+  end
+
+  defp diagnostic_items(diagnostics, key) do
+    diagnostics
+    |> diagnostic_value(key, [])
+    |> list_or_empty()
+  end
+
+  defp diagnostic_codes(diagnostics) do
+    diagnostics
+    |> Enum.map(&diagnostic_value(&1, :code, nil))
+    |> Enum.reject(&is_nil/1)
+    |> Enum.map(&to_string/1)
+    |> Enum.uniq()
+  end
+
+  defp diagnostic_value(%_struct{} = value, key, default) do
+    value
+    |> Map.from_struct()
+    |> diagnostic_value(key, default)
+  end
+
+  defp diagnostic_value(value, key, default), do: map_get(value, Atom.to_string(key), default)
+
+  defp count_query_members(query_members) when is_map(query_members) do
+    query_members
+    |> Map.values()
+    |> Enum.reduce(0, fn
+      members, count when is_map(members) -> count + map_size(members)
+      members, count when is_list(members) -> count + length(members)
+      _members, count -> count
+    end)
+  end
+
+  defp count_query_members(_query_members), do: 0
+
+  defp query_member_names(query_members) when is_map(query_members) do
+    query_members
+    |> Enum.flat_map(fn {group, members} ->
+      members
+      |> registry_names()
+      |> Enum.map(&"#{group}.#{&1}")
+    end)
+    |> Enum.sort()
+  end
+
+  defp query_member_names(_query_members), do: []
+
+  defp registry_names(domain, key) when is_map(domain) do
+    domain
+    |> map_get(key, %{})
+    |> registry_names()
+  end
+
+  defp registry_names(registry) when is_map(registry) do
+    registry
+    |> Map.keys()
+    |> Enum.map(&to_string/1)
+    |> Enum.sort()
+  end
+
+  defp registry_names(_registry), do: []
+
+  defp count_map(value) when is_map(value), do: map_size(value)
+  defp count_map(_value), do: 0
+
+  defp count_list(value) when is_list(value), do: length(value)
+  defp count_list(_value), do: 0
+
+  defp list_or_empty(value) when is_list(value), do: value
+  defp list_or_empty(_value), do: []
+
   defp json_value(%_struct{} = value) do
     value
     |> Map.from_struct()
@@ -278,6 +437,36 @@ defmodule SelectoMix.DomainExport do
   defp json_key(key) when is_atom(key), do: Atom.to_string(key)
   defp json_key(key) when is_binary(key), do: key
   defp json_key(key), do: inspect(key)
+
+  defp map_get(map, key, default \\ nil)
+
+  defp map_get(map, key, default) when is_map(map) and is_binary(key) do
+    atom_key = existing_atom(key)
+
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      atom_key && Map.has_key?(map, atom_key) -> Map.get(map, atom_key)
+      true -> default
+    end
+  end
+
+  defp map_get(map, key, default) when is_map(map) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      Map.has_key?(map, string_key) -> Map.get(map, string_key)
+      true -> default
+    end
+  end
+
+  defp map_get(_map, _key, default), do: default
+
+  defp existing_atom(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> nil
+  end
 
   defp term_type(value) when is_pid(value), do: :pid
   defp term_type(value) when is_port(value), do: :port

@@ -8,7 +8,11 @@ unless Code.ensure_loaded?(Selecto.Domain) do
          errors: [],
          warnings: [],
          schema_version: schema_version,
-         schema_version_inferred: false
+         schema_version_inferred: false,
+         canonical_sections: [:source, :schemas, :joins, :filters, :functions, :published_views],
+         projection_sections: [],
+         proposed_sections: [],
+         unknown_sections: []
        }}
     end
 
@@ -37,9 +41,15 @@ defmodule SelectoMix.DomainExportTaskTest do
             name: %{type: :string, name: "Name"}
           }
         },
-        schemas: %{},
-        joins: %{},
-        filters: %{},
+        schemas: %{
+          customers: %{
+            source_table: "customers",
+            columns: %{id: %{type: :integer}, name: %{type: :string}}
+          }
+        },
+        joins: %{customer: %{name: "Customer"}},
+        filters: %{name: %{type: :string}},
+        functions: %{name_lower: %{kind: :scalar}},
         published_views: %{
           "demo_rollup" => %{
             kind: :view,
@@ -113,6 +123,32 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "Domain module: #{inspect(DemoDomain)}"
       assert output =~ "Schema version: 1"
       assert output =~ "Diagnostics: 0 errors, 0 warnings"
+    end)
+  end
+
+  test "inspects an exported normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_inspect", fn ->
+      Mix.Task.reenable("selecto.domain.inspect")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Inspect.run(["demo.normalized.json"])
+        end)
+
+      assert output =~ "Normalized domain artifact: demo.normalized.json"
+      assert output =~ "Name: Demo Items"
+      assert output =~ "Sections:"
+      assert output =~ "canonical: source, schemas, joins, filters, functions, published_views"
+      assert output =~ "source fields: 2"
+      assert output =~ "schemas: 1"
+      assert output =~ "joins: customer"
+      assert output =~ "filters: name"
+      assert output =~ "functions: name_lower"
+      assert output =~ "published views: demo_rollup"
+      assert output =~ "artifact: 0 errors, 0 warnings"
+      assert output =~ "current: 0 errors, 0 warnings"
     end)
   end
 

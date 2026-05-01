@@ -91,6 +91,7 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.validate.parameterized_joins`
 - `mix selecto.domain.export`
 - `mix selecto.domain.check`
+- `mix selecto.domain.inspect`
 
 Export a normalized domain JSON artifact:
 
@@ -105,6 +106,12 @@ Check an exported artifact without loading the original domain module:
 
 ```bash
 mix selecto.domain.check priv/selecto/product.normalized.json
+```
+
+Inspect the same artifact for a compact sections/counts/registries summary:
+
+```bash
+mix selecto.domain.inspect priv/selecto/product.normalized.json
 ```
 
 ## UDF Workflow
