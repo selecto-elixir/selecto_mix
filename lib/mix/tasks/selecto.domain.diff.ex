@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
 
   The task reads two artifacts produced by `mix selecto.domain.export`, verifies
   them, and compares section classifications, counts, registry names, and
-  diagnostic counts/codes.
+  diagnostic counts/codes across query and operational domain sections.
 
   ## Examples
 

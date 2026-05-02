@@ -942,6 +942,58 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "diffs operational sections in normalized domain JSON artifacts" do
+    in_tmp_dir("selecto_mix_domain_diff_operational", fn ->
+      Mix.Task.reenable("selecto.domain.diff")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(CapabilityDocsDomain)
+
+      changed_artifact =
+        artifact
+        |> update_in(["domain", "detail_actions"], &Map.delete(&1, "profile"))
+        |> update_in(["domain", "writes", "operations"], &Map.put(&1, "insert", %{}))
+        |> update_in(["domain", "writes", "fields"], &Map.delete(&1, "name"))
+        |> update_in(["domain", "writes", "transitions"], fn transitions ->
+          Map.put(transitions, "phase", %{"draft" => ["ready"]})
+        end)
+        |> update_in(["domain", "writes", "validations"], &[%{"field" => "status"} | &1])
+        |> put_in(["domain", "writes", "constraints"], [])
+        |> update_in(["domain", "actions"], &Map.put(&1, "publish", %{}))
+        |> update_in(["domain", "capabilities"], &Map.delete(&1, "item.rank"))
+
+      File.write!("left.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+      File.write!("right.normalized.json", SelectoMix.DomainExport.encode!(changed_artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Diff.run([
+            "left.normalized.json",
+            "right.normalized.json"
+          ])
+        end)
+
+      assert output =~ "detail actions: 1 -> 0 (-1)"
+      assert output =~ "write operations: 1 -> 2 (+1)"
+      assert output =~ "write fields: 1 -> 0 (-1)"
+      assert output =~ "write transitions: 1 -> 2 (+1)"
+      assert output =~ "write validations: 1 -> 2 (+1)"
+      assert output =~ "write constraints: 1 -> 0 (-1)"
+      assert output =~ "actions: 1 -> 2 (+1)"
+      assert output =~ "capabilities: 6 -> 5 (-1)"
+      assert output =~ "detail actions:"
+      assert output =~ "- profile"
+      assert output =~ "write operations:"
+      assert output =~ "+ insert"
+      assert output =~ "write fields:"
+      assert output =~ "- name"
+      assert output =~ "write transitions:"
+      assert output =~ "+ phase"
+      assert output =~ "actions:"
+      assert output =~ "+ publish"
+      assert output =~ "capabilities:"
+      assert output =~ "- item.rank"
+    end)
+  end
+
   test "generated domain files round-trip through export check inspect and diff artifacts" do
     in_tmp_dir("selecto_mix_generated_domain_round_trip", fn ->
       suffix = System.unique_integer([:positive])

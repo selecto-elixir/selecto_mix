@@ -5,7 +5,8 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
 
   The task reads an artifact produced by `mix selecto.domain.export`, verifies
   it the same way `mix selecto.domain.check` does, and prints a compact summary
-  of sections, counts, diagnostics, and registry names.
+  of sections, counts, diagnostics, and registry names across query and
+  operational domain sections.
 
   ## Examples
 
