@@ -130,7 +130,8 @@ mix selecto.domain.import priv/selecto/product.normalized.json --check
 
 The import check includes a generated-domain preview with the target module,
 target file, reconstructed sections, and runtime placeholders that still need
-manual handling.
+manual handling. It also parses the source preview and checks that the target
+module and `domain/0` are present without executing the code.
 
 Add `--source` to print the would-be Elixir module source without writing it,
 or use `--format json` to include the source preview in the import plan.

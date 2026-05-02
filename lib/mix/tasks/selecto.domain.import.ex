@@ -91,6 +91,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("Name: #{Map.get(source, "name") || "(unnamed)"}")
 
     print_preview(Map.fetch!(plan, "preview"), Map.fetch!(plan, "source_preview"))
+    print_source_validation(Map.fetch!(plan, "source_validation"))
     print_sections(Map.fetch!(plan, "sections"))
     print_runtime_placeholders(runtime_placeholders)
     print_diagnostics(diagnostics)
@@ -135,6 +136,21 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("")
     Mix.shell().info("Elixir source preview:")
     IO.write(Map.fetch!(source_preview, "content"))
+  end
+
+  defp print_source_validation(validation) do
+    Mix.shell().info("")
+    Mix.shell().info("Source preview validation:")
+    Mix.shell().info("  syntax: #{Map.get(validation, "syntax")}")
+    Mix.shell().info("  module: #{Map.get(validation, "module") || "(unknown)"}")
+    Mix.shell().info("  target module match: #{Map.get(validation, "target_module_match")}")
+    Mix.shell().info("  domain/0 present: #{Map.get(validation, "domain_function_present")}")
+
+    Mix.shell().info(
+      "  runtime placeholders blocking: #{Map.get(validation, "runtime_placeholders_blocking")} (#{Map.get(validation, "runtime_placeholder_count")})"
+    )
+
+    Mix.shell().info("  write ready: #{Map.get(validation, "write_ready")}")
   end
 
   defp print_sections(sections) do

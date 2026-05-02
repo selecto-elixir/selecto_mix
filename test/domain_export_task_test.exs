@@ -320,6 +320,13 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "reconstructable sections: filters, functions, joins, schemas, source"
       assert output =~ "partial sections: published_views"
       assert output =~ "source preview:"
+      assert output =~ "Source preview validation:"
+      assert output =~ "syntax: ok"
+      assert output =~ "module: #{inspect(DemoDomain)}"
+      assert output =~ "target module match: true"
+      assert output =~ "domain/0 present: true"
+      assert output =~ "runtime placeholders blocking: true (1)"
+      assert output =~ "write ready: false"
       refute output =~ "defmodule #{inspect(DemoDomain)} do"
       assert output =~ "source: 1 (reconstructable)"
       assert output =~ "published_views: 1 (partial_runtime_placeholders)"
@@ -362,6 +369,14 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["source_preview"]["content"] =~ "defmodule Preview.TargetDomain do"
       assert plan["source_preview"]["content"] =~ "def domain do"
       assert plan["source_preview"]["content"] =~ ~s("$selecto_export" => "function")
+      assert plan["source_validation"]["valid"] == true
+      assert plan["source_validation"]["syntax"] == "ok"
+      assert plan["source_validation"]["module"] == "Preview.TargetDomain"
+      assert plan["source_validation"]["target_module_match"] == true
+      assert plan["source_validation"]["domain_function_present"] == true
+      assert plan["source_validation"]["runtime_placeholders_blocking"] == true
+      assert plan["source_validation"]["runtime_placeholder_count"] == 1
+      assert plan["source_validation"]["write_ready"] == false
       assert plan["runtime_placeholders"]["count"] == 1
       assert plan["write"]["status"] == "not_implemented"
 

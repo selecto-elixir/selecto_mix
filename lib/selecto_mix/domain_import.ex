@@ -42,6 +42,7 @@ defmodule SelectoMix.DomainImport do
     runtime_placeholders = runtime_placeholders(domain)
     sections = sections(domain, summary, runtime_placeholders)
     preview = preview(summary, sections, runtime_placeholders, opts)
+    source_preview = source_preview(domain, preview, runtime_placeholders)
 
     %{
       "format" => @format,
@@ -56,7 +57,8 @@ defmodule SelectoMix.DomainImport do
         "name" => Map.get(summary, :name)
       },
       "preview" => preview,
-      "source_preview" => source_preview(domain, preview, runtime_placeholders),
+      "source_preview" => source_preview,
+      "source_validation" => source_validation(source_preview, runtime_placeholders),
       "sections" => sections,
       "runtime_placeholders" => runtime_placeholders,
       "diagnostics" => DomainExport.json_safe(Map.fetch!(summary, :diagnostics)),
@@ -148,6 +150,77 @@ defmodule SelectoMix.DomainImport do
     content
     |> String.split("\n", trim: true)
     |> length()
+  end
+
+  defp source_validation(source_preview, runtime_placeholders) do
+    content = Map.fetch!(source_preview, "content")
+    target_module = module_name(Map.fetch!(source_preview, "target_module"))
+    runtime_placeholder_count = map_get(runtime_placeholders, "count", 0)
+
+    case Code.string_to_quoted(content) do
+      {:ok, ast} ->
+        module = ast_module_name(ast)
+        target_module_match? = module == target_module
+        domain_function_present? = domain_function_present?(ast)
+        valid? = target_module_match? and domain_function_present?
+
+        %{
+          "valid" => valid?,
+          "syntax" => "ok",
+          "error" => nil,
+          "module" => module,
+          "target_module" => target_module,
+          "target_module_match" => target_module_match?,
+          "domain_function_present" => domain_function_present?,
+          "runtime_placeholders_blocking" => runtime_placeholder_count > 0,
+          "runtime_placeholder_count" => runtime_placeholder_count,
+          "write_ready" => valid? and runtime_placeholder_count == 0
+        }
+
+      {:error, reason} ->
+        %{
+          "valid" => false,
+          "syntax" => "error",
+          "error" => inspect(reason),
+          "module" => nil,
+          "target_module" => target_module,
+          "target_module_match" => false,
+          "domain_function_present" => false,
+          "runtime_placeholders_blocking" => runtime_placeholder_count > 0,
+          "runtime_placeholder_count" => runtime_placeholder_count,
+          "write_ready" => false
+        }
+    end
+  end
+
+  defp ast_module_name({:defmodule, _meta, [module_ast, _body]}) do
+    ast_alias_name(module_ast)
+  end
+
+  defp ast_module_name(_ast), do: nil
+
+  defp ast_alias_name({:__aliases__, _meta, parts}) do
+    Enum.map_join(parts, ".", &to_string/1)
+  end
+
+  defp ast_alias_name(module) when is_atom(module), do: module_name(module)
+  defp ast_alias_name(_module), do: nil
+
+  defp domain_function_present?(ast) do
+    {_ast, found?} =
+      Macro.prewalk(ast, false, fn
+        node, true ->
+          {node, true}
+
+        {:def, _meta, [{:domain, _fun_meta, args}, _body]} = node, false
+        when args in [nil, []] ->
+          {node, true}
+
+        node, found? ->
+          {node, found?}
+      end)
+
+    found?
   end
 
   defp target_module(summary, opts) do
