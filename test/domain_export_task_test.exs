@@ -521,6 +521,68 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
+  test "round-trips written normalized domain import previews" do
+    in_tmp_dir("selecto_mix_domain_import_write_round_trip", fn ->
+      suffix = System.unique_integer([:positive])
+      target_module = "Preview.ImportedPlain#{suffix}"
+      target_module_atom = Module.concat([target_module])
+      target_file = "lib/preview/imported_plain_#{suffix}.ex"
+
+      Mix.Task.reenable("selecto.domain.import")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(PlainDomain)
+      File.write!("plain.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      write_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "plain.normalized.json",
+            "--write",
+            "--format",
+            "json",
+            "--target-module",
+            target_module,
+            "--target-file",
+            target_file
+          ])
+        end)
+
+      write_plan = Jason.decode!(write_output)
+
+      assert write_plan["mode"] == "write"
+      assert write_plan["preview"]["write_enabled"] == true
+      assert write_plan["source_preview"]["write_enabled"] == true
+      assert write_plan["write"]["status"] == "written"
+      assert write_plan["write"]["target_file"] == target_file
+      assert write_plan["write"]["target_module"] == target_module
+
+      compiled_modules =
+        target_file
+        |> Code.compile_file()
+        |> Enum.map(fn {module, _bytecode} -> module end)
+
+      assert target_module_atom in compiled_modules
+      assert function_exported?(target_module_atom, :domain, 0)
+
+      assert {:ok, round_trip_artifact} = SelectoMix.DomainExport.export(target_module_atom)
+      assert round_trip_artifact["domain"]["name"] == "Plain Items"
+
+      File.write!(
+        "round_trip.normalized.json",
+        SelectoMix.DomainExport.encode!(round_trip_artifact)
+      )
+
+      Mix.Task.reenable("selecto.domain.check")
+
+      check_output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Check.run(["round_trip.normalized.json"])
+        end)
+
+      assert check_output =~ "Checked normalized domain JSON: round_trip.normalized.json"
+      assert check_output =~ "Domain module: #{target_module}"
+    end)
+  end
+
   test "inspects an exported normalized domain JSON artifact" do
     in_tmp_dir("selecto_mix_domain_inspect", fn ->
       Mix.Task.reenable("selecto.domain.inspect")
