@@ -13,6 +13,8 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
       mix selecto.domain.import priv/selecto/product.normalized.json --check
 
       mix selecto.domain.import priv/selecto/product.normalized.json --check --target-module MyApp.SelectoDomains.ProductDomain
+
+      mix selecto.domain.import priv/selecto/product.normalized.json --check --source
   """
 
   use Mix.Task
@@ -20,7 +22,14 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   alias SelectoMix.{DomainExport, DomainImport}
 
   @requirements ["app.start"]
-  @switches [check: :boolean, format: :string, output_dir: :string, target_module: :string]
+  @switches [
+    check: :boolean,
+    format: :string,
+    output_dir: :string,
+    source: :boolean,
+    target_file: :string,
+    target_module: :string
+  ]
   @aliases [c: :check]
 
   @impl Mix.Task
@@ -60,7 +69,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   defp print_plan(plan, opts) do
     case Keyword.get(opts, :format, "text") do
       "text" ->
-        print_text_plan(plan)
+        print_text_plan(plan, opts)
 
       "json" ->
         IO.write(DomainImport.encode!(plan) <> "\n")
@@ -70,7 +79,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     end
   end
 
-  defp print_text_plan(plan) do
+  defp print_text_plan(plan, opts) do
     source = Map.fetch!(plan, "source")
     runtime_placeholders = Map.fetch!(plan, "runtime_placeholders")
     diagnostics = Map.fetch!(plan, "diagnostics")
@@ -81,7 +90,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("Schema version: #{Map.get(source, "schema_version") || "(unknown)"}")
     Mix.shell().info("Name: #{Map.get(source, "name") || "(unnamed)"}")
 
-    print_preview(Map.fetch!(plan, "preview"))
+    print_preview(Map.fetch!(plan, "preview"), Map.fetch!(plan, "source_preview"))
     print_sections(Map.fetch!(plan, "sections"))
     print_runtime_placeholders(runtime_placeholders)
     print_diagnostics(diagnostics)
@@ -89,9 +98,13 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("")
     Mix.shell().info("Write status: #{get_in(plan, ["write", "status"])}")
     Mix.shell().info("  #{get_in(plan, ["write", "message"])}")
+
+    if Keyword.get(opts, :source, false) do
+      print_source_preview(Map.fetch!(plan, "source_preview"))
+    end
   end
 
-  defp print_preview(preview) do
+  defp print_preview(preview, source_preview) do
     Mix.shell().info("")
     Mix.shell().info("Generated-domain preview:")
     Mix.shell().info("  status: #{Map.get(preview, "status")}")
@@ -112,6 +125,16 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info(
       "  preserved unmodeled sections: #{format_list(Map.get(preview, "preserved_unmodeled_sections", []))}"
     )
+
+    Mix.shell().info(
+      "  source preview: #{Map.get(source_preview, "line_count")} lines (use --source to print)"
+    )
+  end
+
+  defp print_source_preview(source_preview) do
+    Mix.shell().info("")
+    Mix.shell().info("Elixir source preview:")
+    IO.write(Map.fetch!(source_preview, "content"))
   end
 
   defp print_sections(sections) do

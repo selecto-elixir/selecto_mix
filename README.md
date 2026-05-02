@@ -132,6 +132,9 @@ The import check includes a generated-domain preview with the target module,
 target file, reconstructed sections, and runtime placeholders that still need
 manual handling.
 
+Add `--source` to print the would-be Elixir module source without writing it,
+or use `--format json` to include the source preview in the import plan.
+
 Inspect the same artifact for a compact sections/counts/registries summary:
 
 ```bash

@@ -319,6 +319,8 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "write enabled: false"
       assert output =~ "reconstructable sections: filters, functions, joins, schemas, source"
       assert output =~ "partial sections: published_views"
+      assert output =~ "source preview:"
+      refute output =~ "defmodule #{inspect(DemoDomain)} do"
       assert output =~ "source: 1 (reconstructable)"
       assert output =~ "published_views: 1 (partial_runtime_placeholders)"
       assert output =~ "Runtime placeholders: 1"
@@ -354,8 +356,36 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["preview"]["target_file"] == "tmp/imported/preview/target_domain.ex"
       assert plan["preview"]["domain_function"] == "domain/0"
       assert plan["preview"]["partial_sections"] == ["published_views"]
+      assert plan["source_preview"]["language"] == "elixir"
+      assert plan["source_preview"]["target_module"] == "Preview.TargetDomain"
+      assert plan["source_preview"]["includes_runtime_placeholders"] == true
+      assert plan["source_preview"]["content"] =~ "defmodule Preview.TargetDomain do"
+      assert plan["source_preview"]["content"] =~ "def domain do"
+      assert plan["source_preview"]["content"] =~ ~s("$selecto_export" => "function")
       assert plan["runtime_placeholders"]["count"] == 1
       assert plan["write"]["status"] == "not_implemented"
+
+      source_output =
+        capture_io(fn ->
+          Mix.Task.reenable("selecto.domain.import")
+
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "demo.normalized.json",
+            "--check",
+            "--source",
+            "--target-module",
+            "Preview.TargetDomain",
+            "--target-file",
+            "tmp/imported/preview_target.ex"
+          ])
+        end)
+
+      assert source_output =~ "Elixir source preview:"
+      assert source_output =~ "target file: tmp/imported/preview_target.ex"
+      assert source_output =~ "defmodule Preview.TargetDomain do"
+      assert source_output =~ "Selecto domain import preview."
+      assert source_output =~ ~s("name" => "Demo Items")
+      assert source_output =~ ~s("$selecto_export" => "function")
     end)
   end
 
