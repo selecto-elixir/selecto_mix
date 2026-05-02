@@ -317,6 +317,7 @@ defmodule SelectoMix.DomainExport do
 
   defp counts_summary(domain) do
     query_members = map_get(domain, "query_members", %{})
+    writes = map_get(domain, "writes", %{})
 
     %{
       source_fields: domain |> map_get("source", %{}) |> map_get("fields", []) |> count_list(),
@@ -327,18 +328,34 @@ defmodule SelectoMix.DomainExport do
       functions: domain |> map_get("functions", %{}) |> count_map(),
       query_members: count_query_members(query_members),
       published_views: domain |> map_get("published_views", %{}) |> count_map(),
+      detail_actions: domain |> map_get("detail_actions", %{}) |> count_map(),
+      write_operations: writes |> map_get("operations", %{}) |> count_map(),
+      write_fields: writes |> map_get("fields", %{}) |> count_map(),
+      write_transitions: writes |> map_get("transitions", %{}) |> count_map(),
+      write_validations: writes |> map_get("validations", []) |> count_list(),
+      write_constraints: writes |> map_get("constraints", []) |> count_list(),
+      actions: domain |> map_get("actions", %{}) |> count_map(),
+      capabilities: domain |> map_get("capabilities", %{}) |> count_map(),
       source_relationships: domain |> map_get("source_relationships", %{}) |> count_map(),
       choice_sources: domain |> map_get("choice_sources", %{}) |> count_map()
     }
   end
 
   defp registries_summary(domain) do
+    writes = map_get(domain, "writes", %{})
+
     %{
       joins: registry_names(domain, "joins"),
       filters: registry_names(domain, "filters"),
       functions: registry_names(domain, "functions"),
       query_members: query_member_names(map_get(domain, "query_members", %{})),
       published_views: registry_names(domain, "published_views"),
+      detail_actions: registry_names(domain, "detail_actions"),
+      write_operations: registry_names(writes, "operations"),
+      write_fields: registry_names(writes, "fields"),
+      write_transitions: registry_names(writes, "transitions"),
+      actions: registry_names(domain, "actions"),
+      capabilities: registry_names(domain, "capabilities"),
       source_relationships: registry_names(domain, "source_relationships"),
       choice_sources: registry_names(domain, "choice_sources")
     }

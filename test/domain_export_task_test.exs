@@ -271,6 +271,13 @@ defmodule SelectoMix.DomainExportTaskTest do
         },
         published_views: %{items_rollup: %{kind: :view, capability: "item.view"}},
         detail_actions: %{profile: %{type: :external_link, capability: "item.view"}},
+        writes: %{
+          operations: %{update: %{fields: [:name]}},
+          fields: %{name: %{updatable: true}},
+          transitions: %{status: %{"active" => ["archived"]}},
+          validations: [%{field: :name}],
+          constraints: [%{field: :name}]
+        },
         actions: %{archive: %{type: :transition, capability: "item.archive"}},
         capabilities: %{
           "item.archive" => %{operations: [:action]},
@@ -641,6 +648,37 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "published views: demo_rollup"
       assert output =~ "artifact: 0 errors, 0 warnings"
       assert output =~ "current: 0 errors, 0 warnings"
+    end)
+  end
+
+  test "inspects operational counts from a normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_inspect_operational", fn ->
+      Mix.Task.reenable("selecto.domain.inspect")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(CapabilityDocsDomain)
+      File.write!("capability.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Inspect.run(["capability.normalized.json"])
+        end)
+
+      assert output =~ "Name: Capability Items"
+      assert output =~ "detail actions: 1"
+      assert output =~ "write operations: 1"
+      assert output =~ "write fields: 1"
+      assert output =~ "write transitions: 1"
+      assert output =~ "write validations: 1"
+      assert output =~ "write constraints: 1"
+      assert output =~ "actions: 1"
+      assert output =~ "capabilities: 6"
+      assert output =~ "detail actions: profile"
+      assert output =~ "write operations: update"
+      assert output =~ "write fields: name"
+      assert output =~ "write transitions: status"
+      assert output =~ "actions: archive"
+
+      assert output =~
+               "capabilities: item.archive, item.filter, item.member, item.name, item.rank, item.view"
     end)
   end
 

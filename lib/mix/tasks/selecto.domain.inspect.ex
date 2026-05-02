@@ -26,6 +26,14 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     :functions,
     :query_members,
     :published_views,
+    :detail_actions,
+    :write_operations,
+    :write_fields,
+    :write_transitions,
+    :write_validations,
+    :write_constraints,
+    :actions,
+    :capabilities,
     :source_relationships,
     :choice_sources
   ]
@@ -35,6 +43,12 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     :functions,
     :query_members,
     :published_views,
+    :detail_actions,
+    :write_operations,
+    :write_fields,
+    :write_transitions,
+    :actions,
+    :capabilities,
     :source_relationships,
     :choice_sources
   ]
