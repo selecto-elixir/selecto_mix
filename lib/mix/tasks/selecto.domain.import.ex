@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   ## Examples
 
       mix selecto.domain.import priv/selecto/product.normalized.json --check
+
+      mix selecto.domain.import priv/selecto/product.normalized.json --check --target-module MyApp.SelectoDomains.ProductDomain
   """
 
   use Mix.Task
@@ -18,7 +20,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   alias SelectoMix.{DomainExport, DomainImport}
 
   @requirements ["app.start"]
-  @switches [check: :boolean, format: :string]
+  @switches [check: :boolean, format: :string, output_dir: :string, target_module: :string]
   @aliases [c: :check]
 
   @impl Mix.Task
@@ -46,7 +48,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   end
 
   defp check_import(path, opts) do
-    case DomainImport.plan_file(path) do
+    case DomainImport.plan_file(path, opts) do
       {:ok, plan} ->
         print_plan(plan, opts)
 
@@ -79,6 +81,7 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("Schema version: #{Map.get(source, "schema_version") || "(unknown)"}")
     Mix.shell().info("Name: #{Map.get(source, "name") || "(unnamed)"}")
 
+    print_preview(Map.fetch!(plan, "preview"))
     print_sections(Map.fetch!(plan, "sections"))
     print_runtime_placeholders(runtime_placeholders)
     print_diagnostics(diagnostics)
@@ -86,6 +89,29 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("")
     Mix.shell().info("Write status: #{get_in(plan, ["write", "status"])}")
     Mix.shell().info("  #{get_in(plan, ["write", "message"])}")
+  end
+
+  defp print_preview(preview) do
+    Mix.shell().info("")
+    Mix.shell().info("Generated-domain preview:")
+    Mix.shell().info("  status: #{Map.get(preview, "status")}")
+    Mix.shell().info("  target module: #{Map.get(preview, "target_module")}")
+    Mix.shell().info("  target file: #{Map.get(preview, "target_file")}")
+    Mix.shell().info("  domain function: #{Map.get(preview, "domain_function")}")
+    Mix.shell().info("  render strategy: #{Map.get(preview, "render_strategy")}")
+    Mix.shell().info("  write enabled: #{Map.get(preview, "write_enabled")}")
+
+    Mix.shell().info(
+      "  reconstructable sections: #{format_list(Map.get(preview, "reconstructable_sections", []))}"
+    )
+
+    Mix.shell().info(
+      "  partial sections: #{format_list(Map.get(preview, "partial_sections", []))}"
+    )
+
+    Mix.shell().info(
+      "  preserved unmodeled sections: #{format_list(Map.get(preview, "preserved_unmodeled_sections", []))}"
+    )
   end
 
   defp print_sections(sections) do
@@ -145,6 +171,9 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
   defp class_order("proposed"), do: 2
   defp class_order("unknown"), do: 3
   defp class_order(_class), do: 4
+
+  defp format_list([]), do: "(none)"
+  defp format_list(values), do: Enum.join(values, ", ")
 
   defp format_invalid_options(invalid) do
     invalid

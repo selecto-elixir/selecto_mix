@@ -128,6 +128,10 @@ Preview the current non-writing import/readback plan:
 mix selecto.domain.import priv/selecto/product.normalized.json --check
 ```
 
+The import check includes a generated-domain preview with the target module,
+target file, reconstructed sections, and runtime placeholders that still need
+manual handling.
+
 Inspect the same artifact for a compact sections/counts/registries summary:
 
 ```bash

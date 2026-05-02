@@ -310,6 +310,15 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "Checked normalized domain import plan: demo.normalized.json"
       assert output =~ "Mode: check (no files written)"
       assert output =~ "Name: Demo Items"
+      assert output =~ "Generated-domain preview:"
+      assert output =~ "status: partial"
+      assert output =~ "target module: #{inspect(DemoDomain)}"
+      assert output =~ "target file: lib/selecto_mix/domain_export_task_test/demo_domain.ex"
+      assert output =~ "domain function: domain/0"
+      assert output =~ "render strategy: literal_domain_map"
+      assert output =~ "write enabled: false"
+      assert output =~ "reconstructable sections: filters, functions, joins, schemas, source"
+      assert output =~ "partial sections: published_views"
       assert output =~ "source: 1 (reconstructable)"
       assert output =~ "published_views: 1 (partial_runtime_placeholders)"
       assert output =~ "Runtime placeholders: 1"
@@ -327,7 +336,11 @@ defmodule SelectoMix.DomainExportTaskTest do
             "demo.normalized.json",
             "--check",
             "--format",
-            "json"
+            "json",
+            "--target-module",
+            "Preview.TargetDomain",
+            "--output-dir",
+            "tmp/imported"
           ])
         end)
 
@@ -336,6 +349,11 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["format"] == "selecto.domain_import_plan"
       assert plan["mode"] == "check"
       assert plan["source"]["name"] == "Demo Items"
+      assert plan["preview"]["status"] == "partial"
+      assert plan["preview"]["target_module"] == "Preview.TargetDomain"
+      assert plan["preview"]["target_file"] == "tmp/imported/preview/target_domain.ex"
+      assert plan["preview"]["domain_function"] == "domain/0"
+      assert plan["preview"]["partial_sections"] == ["published_views"]
       assert plan["runtime_placeholders"]["count"] == 1
       assert plan["write"]["status"] == "not_implemented"
     end)
@@ -644,6 +662,8 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert import_output =~ "Checked normalized domain import plan: generated.normalized.json"
       assert import_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
+      assert import_output =~ "Generated-domain preview:"
+      assert import_output =~ "target module: #{inspect(domain_module)}"
       assert import_output =~ "source: 1 (reconstructable)"
 
       inspect_output =

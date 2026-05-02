@@ -31,15 +31,16 @@ defmodule SelectoMix.DomainImport do
   @spec plan_file(Path.t(), keyword()) :: {:ok, map()} | {:error, DomainExport.artifact_error()}
   def plan_file(path, opts \\ []) do
     with {:ok, check} <- DomainExport.check_file(path, opts) do
-      {:ok, plan(check)}
+      {:ok, plan(check, opts)}
     end
   end
 
-  @spec plan(map()) :: map()
-  def plan(%{artifact: artifact} = check) do
+  @spec plan(map(), keyword()) :: map()
+  def plan(%{artifact: artifact} = check, opts \\ []) do
     summary = DomainExport.summary(check)
     domain = Map.get(artifact, "domain", %{})
     runtime_placeholders = runtime_placeholders(domain)
+    sections = sections(domain, summary, runtime_placeholders)
 
     %{
       "format" => @format,
@@ -53,7 +54,8 @@ defmodule SelectoMix.DomainImport do
         "schema_version" => Map.get(artifact, "schema_version"),
         "name" => Map.get(summary, :name)
       },
-      "sections" => sections(domain, summary, runtime_placeholders),
+      "preview" => preview(summary, sections, runtime_placeholders, opts),
+      "sections" => sections,
       "runtime_placeholders" => runtime_placeholders,
       "diagnostics" => DomainExport.json_safe(Map.fetch!(summary, :diagnostics)),
       "write" => %{
@@ -66,6 +68,49 @@ defmodule SelectoMix.DomainImport do
   @spec encode!(map(), keyword()) :: String.t()
   def encode!(plan, opts \\ []) do
     DomainExport.encode!(plan, opts)
+  end
+
+  defp preview(summary, sections, runtime_placeholders, opts) do
+    target_module = target_module(summary, opts)
+    output_dir = opts[:output_dir] || "lib"
+    target_file = opts[:target_file] || module_file(target_module, output_dir)
+    blocked? = map_get(runtime_placeholders, "count", 0) > 0
+
+    %{
+      "status" => if(blocked?, do: "partial", else: "ready"),
+      "target_module" => target_module,
+      "target_file" => target_file,
+      "domain_function" => "domain/0",
+      "render_strategy" => "literal_domain_map",
+      "write_enabled" => false,
+      "blocked_by_runtime_placeholders" => blocked?,
+      "reconstructable_sections" => sections_by_status(sections, "reconstructable"),
+      "partial_sections" => sections_by_status(sections, "partial_runtime_placeholders"),
+      "preserved_unmodeled_sections" => sections_by_status(sections, "preserved_unmodeled")
+    }
+  end
+
+  defp target_module(summary, opts) do
+    opts[:target_module] ||
+      Map.get(summary, :domain_module) ||
+      "Imported.SelectoDomain"
+  end
+
+  defp module_file(module, output_dir) do
+    module_path =
+      module
+      |> to_string()
+      |> String.replace_prefix("Elixir.", "")
+      |> Macro.underscore()
+
+    Path.join(output_dir, "#{module_path}.ex")
+  end
+
+  defp sections_by_status(sections, status) do
+    sections
+    |> Enum.filter(&(Map.get(&1, "status") == status))
+    |> Enum.map(&Map.fetch!(&1, "name"))
+    |> Enum.sort()
   end
 
   defp sections(domain, summary, runtime_placeholders) do
