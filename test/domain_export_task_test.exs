@@ -738,6 +738,21 @@ defmodule SelectoMix.DomainExportTaskTest do
               "compact?" => true,
               "reference?" => true
             }
+          ],
+          "capabilities" => [
+            %{
+              "id" => "customer.choose",
+              "operations" => ["choice_source"]
+            }
+          ],
+          "capability_usage" => [
+            %{
+              "capability" => "customer.choose",
+              "section" => "choice_sources",
+              "role" => "choice_source",
+              "id" => "customer_choices",
+              "path" => ["choice_sources", "customer_choices", "capability"]
+            }
           ]
         },
         "diagnostics" => %{"errors" => [], "warnings" => []}
@@ -767,6 +782,13 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert diagram =~ "Picker field: customer_id"
       assert diagram =~ "choice_customer_choices -. uses .-> rel_customer"
       assert diagram =~ "binding_customer_id -. picker .-> choice_customer_choices"
+      assert diagram =~ ~s(subgraph capabilities["Capabilities"])
+      assert diagram =~ "Capability: customer.choose\\noperations: choice_source"
+      assert diagram =~ ~s(subgraph capability_usage["Capability Usage"])
+      assert diagram =~ "Choice source: customer_choices\\nsection: choice_sources"
+
+      assert diagram =~
+               "capuse_choice_sources_customer_choices_capability -. requires .-> cap_customer_choose"
     end)
   end
 

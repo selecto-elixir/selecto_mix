@@ -35,6 +35,8 @@ defmodule SelectoMix.DomainDiagram do
     relationships = map_get(inspection, "source_relationships", []) |> list_or_empty()
     choice_sources = map_get(inspection, "choice_sources", []) |> list_or_empty()
     field_bindings = map_get(inspection, "field_choice_bindings", []) |> list_or_empty()
+    capabilities = map_get(inspection, "capabilities", []) |> list_or_empty()
+    capability_usage = map_get(inspection, "capability_usage", []) |> list_or_empty()
 
     [
       "flowchart LR",
@@ -44,6 +46,7 @@ defmodule SelectoMix.DomainDiagram do
       relationship_section(relationships),
       choice_source_section(choice_sources, relationships),
       field_binding_section(field_bindings, choice_sources),
+      capability_section(capabilities, capability_usage),
       class_defs()
     ]
     |> List.flatten()
@@ -203,6 +206,54 @@ defmodule SelectoMix.DomainDiagram do
     ["", ~s(  subgraph field_bindings["Field Choice Bindings"])] ++ nodes ++ ["  end"] ++ edges
   end
 
+  defp capability_section([], []), do: []
+
+  defp capability_section(capabilities, capability_usage) do
+    capability_ids =
+      capabilities
+      |> Enum.map(&map_get(&1, "id"))
+      |> Kernel.++(Enum.map(capability_usage, &map_get(&1, "capability")))
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.uniq_by(&to_string/1)
+      |> Enum.sort_by(&to_string/1)
+
+    capability_nodes =
+      capability_ids
+      |> Enum.map(fn capability_id ->
+        node(
+          capability_node_id(capability_id),
+          capability_label(capability_id, find_capability(capabilities, capability_id)),
+          "    "
+        )
+      end)
+
+    usage_nodes =
+      capability_usage
+      |> sort_by_path()
+      |> Enum.map(fn usage ->
+        node(capability_usage_node_id(usage), capability_usage_label(usage), "    ")
+      end)
+
+    usage_edges =
+      capability_usage
+      |> sort_by_path()
+      |> Enum.map(fn usage ->
+        edge(
+          capability_usage_node_id(usage),
+          capability_node_id(map_get(usage, "capability")),
+          "requires"
+        )
+      end)
+
+    ["", ~s(  subgraph capabilities["Capabilities"])] ++
+      capability_nodes ++
+      ["  end"] ++
+      ["", ~s(  subgraph capability_usage["Capability Usage"])] ++
+      usage_nodes ++
+      ["  end"] ++
+      usage_edges
+  end
+
   defp relationship_edge(_choice_node, nil, _relationship_ids), do: nil
 
   defp relationship_edge(choice_node, relationship_id, relationship_ids) do
@@ -331,6 +382,17 @@ defmodule SelectoMix.DomainDiagram do
   defp relationship_node_id(relationship), do: node_id("rel", map_get(relationship, "id"))
   defp choice_source_node_id(choice_source), do: node_id("choice", map_get(choice_source, "id"))
   defp field_binding_node_id(binding), do: node_id("binding", map_get(binding, "field"))
+  defp capability_node_id(capability), do: node_id("cap", capability)
+
+  defp capability_usage_node_id(usage) do
+    usage_path =
+      usage
+      |> map_get("path", [])
+      |> list_or_empty()
+      |> Enum.join("_")
+
+    node_id("capuse", usage_path)
+  end
 
   defp node_id(prefix, value) do
     suffix =
@@ -351,6 +413,8 @@ defmodule SelectoMix.DomainDiagram do
       "  classDef relationship fill:#fff4d6,stroke:#9f7a24,color:#222",
       "  classDef choice fill:#e9f8ef,stroke:#3f8f5b,color:#222",
       "  classDef binding fill:#f4ecff,stroke:#7a4fb3,color:#222",
+      "  classDef capability fill:#f8e8ed,stroke:#9b3954,color:#222",
+      "  classDef usage fill:#f5f5f5,stroke:#777,color:#222",
       "  class domain domain",
       "  class source source"
     ]
@@ -362,6 +426,53 @@ defmodule SelectoMix.DomainDiagram do
 
   defp sort_by_field(values) do
     Enum.sort_by(values, &to_string(map_get(&1, "field", "")))
+  end
+
+  defp sort_by_path(values) do
+    Enum.sort_by(values, fn value ->
+      value
+      |> map_get("path", [])
+      |> list_or_empty()
+      |> Enum.map_join(".", &to_string/1)
+    end)
+  end
+
+  defp capability_label(capability_id, capability) do
+    operations =
+      capability
+      |> map_get("operations", [])
+      |> list_or_empty()
+
+    [
+      "Capability: #{capability_id}",
+      operations != [] && "operations: #{format_list(operations)}"
+    ]
+    |> compact_join()
+  end
+
+  defp capability_usage_label(usage) do
+    [
+      usage_role_label(map_get(usage, "role"), map_get(usage, "id") || map_get(usage, "field")),
+      map_get(usage, "section") && "section: #{map_get(usage, "section")}",
+      map_get(usage, "group") && "group: #{map_get(usage, "group")}"
+    ]
+    |> compact_join()
+  end
+
+  defp usage_role_label(role, nil), do: "Usage: #{role || "unknown"}"
+  defp usage_role_label(role, value), do: "#{usage_role_title(role)}: #{value}"
+
+  defp usage_role_title(role) do
+    role
+    |> to_string()
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp find_capability(capabilities, capability_id) do
+    Enum.find(capabilities, fn capability ->
+      to_string(map_get(capability, "id")) == to_string(capability_id)
+    end)
   end
 
   defp compact_join(values) do
