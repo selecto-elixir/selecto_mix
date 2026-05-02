@@ -164,7 +164,8 @@ Generate a Mermaid diagram from the inspection artifact:
 mix selecto.domain.diagram priv/selecto/product.inspection.json --output docs/selecto/product.diagram.mmd
 ```
 
-Generate Markdown docs from the same artifact:
+Generate Markdown docs from the same artifact, including capability usage
+tables when the domain declares capability references:
 
 ```bash
 mix selecto.domain.docs priv/selecto/product.normalized.json --output docs/selecto/product.md

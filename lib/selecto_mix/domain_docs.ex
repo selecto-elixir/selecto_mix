@@ -66,6 +66,7 @@ defmodule SelectoMix.DomainDocs do
       schemas_section(domain),
       registries_section(domain),
       query_members_section(domain),
+      capability_usage_section(domain),
       diagnostics_section(summary)
     ]
     |> List.flatten()
@@ -253,6 +254,164 @@ defmodule SelectoMix.DomainDocs do
 
   defp query_member_rows(_group, _members), do: []
 
+  defp capability_usage_section(domain) do
+    usage = capability_usage(domain)
+
+    if usage == [] do
+      []
+    else
+      [
+        "## Capability Usage",
+        "",
+        "| Capability | Role | Section | Target | Path |",
+        "| --- | --- | --- | --- | --- |"
+      ] ++
+        Enum.map(usage, fn entry ->
+          table_row([
+            map_get(entry, "capability"),
+            map_get(entry, "role"),
+            map_get(entry, "section"),
+            map_get(entry, "target"),
+            format_path(map_get(entry, "path", []))
+          ])
+        end) ++
+        [""]
+    end
+  end
+
+  defp capability_usage(domain) do
+    []
+    |> Kernel.++(relation_capability_usage("source", map_get(domain, "source"), ["source"]))
+    |> Kernel.++(schema_capability_usage(map_get(domain, "schemas")))
+    |> Kernel.++(
+      capability_section_usage(
+        "custom_columns",
+        map_get(domain, "custom_columns"),
+        "custom column",
+        ["custom_columns"]
+      )
+    )
+    |> Kernel.++(
+      capability_section_usage("filters", map_get(domain, "filters"), "query filter", [
+        "filters"
+      ])
+    )
+    |> Kernel.++(
+      capability_section_usage("functions", map_get(domain, "functions"), "query function", [
+        "functions"
+      ])
+    )
+    |> Kernel.++(query_member_capability_usage(map_get(domain, "query_members")))
+    |> Kernel.++(
+      capability_section_usage(
+        "published_views",
+        map_get(domain, "published_views"),
+        "published view",
+        ["published_views"]
+      )
+    )
+    |> Kernel.++(
+      capability_section_usage(
+        "detail_actions",
+        map_get(domain, "detail_actions"),
+        "detail action",
+        ["detail_actions"]
+      )
+    )
+    |> Kernel.++(
+      capability_section_usage("actions", map_get(domain, "actions"), "action", ["actions"])
+    )
+    |> Kernel.++(
+      capability_section_usage(
+        "choice_sources",
+        map_get(domain, "choice_sources"),
+        "choice source",
+        ["choice_sources"]
+      )
+    )
+    |> Enum.sort_by(fn entry ->
+      {to_string(map_get(entry, "capability")), format_path(map_get(entry, "path", []))}
+    end)
+  end
+
+  defp schema_capability_usage(schemas) when is_map(schemas) do
+    schemas
+    |> sorted_entries()
+    |> Enum.flat_map(fn {schema_id, schema} ->
+      relation_capability_usage("schemas", schema, ["schemas", schema_id])
+    end)
+  end
+
+  defp schema_capability_usage(_schemas), do: []
+
+  defp relation_capability_usage(section, relation, path_prefix) when is_map(relation) do
+    case map_get(relation, "columns", %{}) do
+      columns when is_map(columns) ->
+        columns
+        |> sorted_entries()
+        |> Enum.flat_map(fn {field, column} ->
+          capability_usage_entries(map_get(column, "capability"), %{
+            "section" => section,
+            "role" => "field",
+            "target" => field,
+            "path" => path_prefix ++ ["columns", field, "capability"]
+          })
+        end)
+
+      _columns ->
+        []
+    end
+  end
+
+  defp relation_capability_usage(_section, _relation, _path_prefix), do: []
+
+  defp capability_section_usage(section, registry, role, path_prefix) when is_map(registry) do
+    registry
+    |> sorted_entries()
+    |> Enum.flat_map(fn {id, spec} ->
+      capability_usage_entries(map_get(spec, "capability"), %{
+        "section" => section,
+        "role" => role,
+        "target" => id,
+        "path" => path_prefix ++ [id, "capability"]
+      })
+    end)
+  end
+
+  defp capability_section_usage(_section, _registry, _role, _path_prefix), do: []
+
+  defp query_member_capability_usage(query_members) when is_map(query_members) do
+    query_members
+    |> sorted_entries()
+    |> Enum.flat_map(fn {group, members} ->
+      query_member_group_capability_usage(group, members)
+    end)
+  end
+
+  defp query_member_capability_usage(_query_members), do: []
+
+  defp query_member_group_capability_usage(group, members) when is_map(members) do
+    members
+    |> sorted_entries()
+    |> Enum.flat_map(fn {id, spec} ->
+      capability_usage_entries(map_get(spec, "capability"), %{
+        "section" => "query_members",
+        "role" => "query member",
+        "target" => "#{group}.#{id}",
+        "path" => ["query_members", group, id, "capability"]
+      })
+    end)
+  end
+
+  defp query_member_group_capability_usage(_group, _members), do: []
+
+  defp capability_usage_entries(capability, attrs)
+       when not is_nil(capability) and (is_atom(capability) or is_binary(capability)) do
+    [Map.put(attrs, "capability", capability)]
+  end
+
+  defp capability_usage_entries(_capability, _attrs), do: []
+
   defp diagnostics_section(summary) do
     diagnostics = Map.fetch!(summary, :diagnostics)
 
@@ -354,6 +513,12 @@ defmodule SelectoMix.DomainDocs do
   end
 
   defp format_list(value), do: to_string(value)
+
+  defp format_path(path) when is_list(path) do
+    Enum.map_join(path, ".", &to_string/1)
+  end
+
+  defp format_path(path), do: to_string(path)
 
   defp format_key(key) do
     key

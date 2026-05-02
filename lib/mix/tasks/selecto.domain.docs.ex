@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Selecto.Domain.Docs do
   The task reads an artifact produced by `mix selecto.domain.export`, verifies
   it the same way `mix selecto.domain.check` does, and renders a compact
   Markdown reference for sections, counts, source fields, schemas, registries,
-  query members, and diagnostics.
+  query members, capability usage, and diagnostics.
 
   ## Examples
 

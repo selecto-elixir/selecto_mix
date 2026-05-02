@@ -252,6 +252,41 @@ defmodule SelectoMix.DomainExportTaskTest do
     end
   end
 
+  defmodule CapabilityDocsDomain do
+    def domain do
+      PlainDomain.domain()
+      |> put_in([:source, :columns, :name, :capability], "item.name")
+      |> Map.merge(%{
+        name: "Capability Items",
+        filters: %{name: %{type: :string, capability: "item.filter"}},
+        functions: %{name_lower: %{kind: :scalar, capability: "item.rank"}},
+        query_members: %{
+          values: %{
+            status_lookup: %{
+              columns: [:status, :label],
+              rows: [["active", "Active"]],
+              capability: "item.member"
+            }
+          }
+        },
+        published_views: %{items_rollup: %{kind: :view, capability: "item.view"}},
+        detail_actions: %{profile: %{type: :external_link, capability: "item.view"}},
+        actions: %{archive: %{type: :transition, capability: "item.archive"}},
+        capabilities: %{
+          "item.archive" => %{operations: [:action]},
+          "item.filter" => %{operations: [:filter]},
+          "item.member" => %{operations: [:query_member]},
+          "item.name" => %{operations: [:select]},
+          "item.rank" => %{operations: [:select]},
+          "item.view" => %{operations: [:select, :detail]}
+        },
+        choice_sources: %{
+          owner_choices: %{domain: :users, value_field: :id, label_field: :name}
+        }
+      })
+    end
+  end
+
   test "exports a normalized domain JSON artifact to stdout" do
     Mix.Task.reenable("selecto.domain.export")
 
@@ -641,6 +676,47 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert docs =~ "| demo_rollup |  | view |  |"
       assert docs =~ "## Diagnostics"
       assert docs =~ "| Current | 0 | 0 | (none) | (none) |"
+    end)
+  end
+
+  test "generates Markdown capability usage docs from a normalized domain JSON artifact" do
+    in_tmp_dir("selecto_mix_domain_docs_capabilities", fn ->
+      Mix.Task.reenable("selecto.domain.docs")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(CapabilityDocsDomain)
+      File.write!("capability.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Docs.run([
+            "capability.normalized.json",
+            "--output",
+            "docs/selecto/capability.md"
+          ])
+        end)
+
+      assert output =~ "Wrote normalized domain Markdown docs: docs/selecto/capability.md"
+
+      docs = File.read!("docs/selecto/capability.md")
+
+      assert docs =~ "# Capability Items"
+      assert docs =~ "## Capability Usage"
+      assert docs =~ "| Capability | Role | Section | Target | Path |"
+      assert docs =~ "| item.name | field | source | name | source.columns.name.capability |"
+      assert docs =~ "| item.filter | query filter | filters | name | filters.name.capability |"
+
+      assert docs =~
+               "| item.rank | query function | functions | name_lower | functions.name_lower.capability |"
+
+      assert docs =~
+               "| item.member | query member | query_members | values.status_lookup | query_members.values.status_lookup.capability |"
+
+      assert docs =~
+               "| item.view | published view | published_views | items_rollup | published_views.items_rollup.capability |"
+
+      assert docs =~
+               "| item.view | detail action | detail_actions | profile | detail_actions.profile.capability |"
+
+      assert docs =~ "| item.archive | action | actions | archive | actions.archive.capability |"
     end)
   end
 
