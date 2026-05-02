@@ -122,7 +122,7 @@ Check an exported artifact without loading the original domain module:
 mix selecto.domain.check priv/selecto/product.normalized.json
 ```
 
-Preview the current non-writing import/readback plan:
+Preview the current import/readback plan:
 
 ```bash
 mix selecto.domain.import priv/selecto/product.normalized.json --check
@@ -135,6 +135,16 @@ module and `domain/0` are present without executing the code.
 
 Add `--source` to print the would-be Elixir module source without writing it,
 or use `--format json` to include the source preview in the import plan.
+
+Write the generated module only after that preview is fully validated and has
+no runtime placeholders:
+
+```bash
+mix selecto.domain.import priv/selecto/product.normalized.json --write --target-file lib/my_app/selecto_domains/product_domain.ex
+```
+
+Existing files are preserved by default; pass `--force` when you intentionally
+want to overwrite the target.
 
 Inspect the same artifact for a compact sections/counts/registries summary:
 

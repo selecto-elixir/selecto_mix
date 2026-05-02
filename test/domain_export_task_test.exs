@@ -230,6 +230,28 @@ defmodule SelectoMix.DomainExportTaskTest do
     end
   end
 
+  defmodule PlainDomain do
+    def domain do
+      %{
+        schema_version: 1,
+        name: "Plain Items",
+        source: %{
+          source_table: "plain_items",
+          primary_key: :id,
+          fields: [:id, :name],
+          columns: %{
+            id: %{type: :integer, name: "ID"},
+            name: %{type: :string, name: "Name"}
+          }
+        },
+        schemas: %{},
+        joins: %{},
+        filters: %{name: %{type: :string}},
+        functions: %{}
+      }
+    end
+  end
+
   test "exports a normalized domain JSON artifact to stdout" do
     Mix.Task.reenable("selecto.domain.export")
 
@@ -335,7 +357,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "domain.published_views.demo_rollup.query (function)"
       assert output =~ "artifact: 0 errors, 0 warnings"
       assert output =~ "current: 0 errors, 0 warnings"
-      assert output =~ "Write status: not_implemented"
+      assert output =~ "Write status: check_only"
 
       json_output =
         capture_io(fn ->
@@ -378,7 +400,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["source_validation"]["runtime_placeholder_count"] == 1
       assert plan["source_validation"]["write_ready"] == false
       assert plan["runtime_placeholders"]["count"] == 1
-      assert plan["write"]["status"] == "not_implemented"
+      assert plan["write"]["status"] == "check_only"
 
       source_output =
         capture_io(fn ->
@@ -404,14 +426,98 @@ defmodule SelectoMix.DomainExportTaskTest do
     end)
   end
 
-  test "refuses normalized domain import writes until write semantics exist" do
+  test "requires an explicit normalized domain import mode" do
     in_tmp_dir("selecto_mix_domain_import_refuses_writes", fn ->
       Mix.Task.reenable("selecto.domain.import")
       File.write!("demo.normalized.json", Jason.encode!(%{}))
 
-      assert_raise Mix.Error, ~r/Writing normalized domain imports is not implemented yet/, fn ->
+      assert_raise Mix.Error, ~r/--check or --write/, fn ->
         Mix.Tasks.Selecto.Domain.Import.run(["demo.normalized.json"])
       end
+    end)
+  end
+
+  test "refuses normalized domain import writes with runtime placeholders" do
+    in_tmp_dir("selecto_mix_domain_import_write_placeholders", fn ->
+      Mix.Task.reenable("selecto.domain.import")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(DemoDomain)
+      File.write!("demo.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      assert_raise Mix.Error, ~r/runtime placeholder\(s\) remain/, fn ->
+        Mix.Tasks.Selecto.Domain.Import.run([
+          "demo.normalized.json",
+          "--write",
+          "--target-module",
+          "Preview.DemoDomain",
+          "--target-file",
+          "lib/preview/demo_domain.ex"
+        ])
+      end
+
+      refute File.exists?("lib/preview/demo_domain.ex")
+    end)
+  end
+
+  test "writes validated normalized domain import previews" do
+    in_tmp_dir("selecto_mix_domain_import_write", fn ->
+      Mix.Task.reenable("selecto.domain.import")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(PlainDomain)
+      File.write!("plain.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "plain.normalized.json",
+            "--write",
+            "--target-module",
+            "Preview.PlainDomain",
+            "--target-file",
+            "lib/preview/plain_domain.ex"
+          ])
+        end)
+
+      assert output =~ "Wrote normalized domain import preview: lib/preview/plain_domain.ex"
+      assert output =~ "Target module: Preview.PlainDomain"
+      assert output =~ "Source validation: ok"
+      assert output =~ "domain/0 present: true"
+      assert output =~ "Runtime placeholders: 0"
+      assert output =~ "Overwrote: false"
+
+      source = File.read!("lib/preview/plain_domain.ex")
+      assert source =~ "defmodule Preview.PlainDomain do"
+      assert source =~ "def domain do"
+      assert source =~ ~s("name" => "Plain Items")
+      refute source =~ "$selecto_export"
+
+      Mix.Task.reenable("selecto.domain.import")
+
+      assert_raise Mix.Error, ~r/already exists/, fn ->
+        Mix.Tasks.Selecto.Domain.Import.run([
+          "plain.normalized.json",
+          "--write",
+          "--target-module",
+          "Preview.PlainDomain",
+          "--target-file",
+          "lib/preview/plain_domain.ex"
+        ])
+      end
+
+      force_output =
+        capture_io(fn ->
+          Mix.Task.reenable("selecto.domain.import")
+
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "plain.normalized.json",
+            "--write",
+            "--force",
+            "--target-module",
+            "Preview.PlainDomain",
+            "--target-file",
+            "lib/preview/plain_domain.ex"
+          ])
+        end)
+
+      assert force_output =~ "Overwrote: true"
     end)
   end
 

@@ -1,12 +1,12 @@
 defmodule Mix.Tasks.Selecto.Domain.Import do
-  @shortdoc "Check a normalized Selecto domain import plan"
+  @shortdoc "Check or write a normalized Selecto domain import preview"
   @moduledoc """
-  Check a normalized Selecto domain import plan.
+  Check or write a normalized Selecto domain import preview.
 
-  This task is deliberately non-writing in the first import/readback slice.
-  `--check` verifies the artifact and reports what a future importer could
-  reconstruct. Running without `--check` raises a clear error until generated
-  file write semantics are designed.
+  `--check` verifies the artifact and reports what SelectoMix can reconstruct.
+  `--write` writes the generated module only when the source preview parses,
+  defines the expected target module, exposes `domain/0`, and contains no
+  runtime placeholders.
 
   ## Examples
 
@@ -15,44 +15,54 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
       mix selecto.domain.import priv/selecto/product.normalized.json --check --target-module MyApp.SelectoDomains.ProductDomain
 
       mix selecto.domain.import priv/selecto/product.normalized.json --check --source
+
+      mix selecto.domain.import priv/selecto/product.normalized.json --write --target-file lib/my_app/selecto_domains/product_domain.ex
   """
 
   use Mix.Task
 
-  alias SelectoMix.{DomainExport, DomainImport}
+  alias SelectoMix.DomainImport
 
   @requirements ["app.start"]
   @switches [
     check: :boolean,
+    force: :boolean,
     format: :string,
     output_dir: :string,
     source: :boolean,
     target_file: :string,
-    target_module: :string
+    target_module: :string,
+    write: :boolean
   ]
-  @aliases [c: :check]
+  @aliases [c: :check, f: :force, w: :write]
 
   @impl Mix.Task
   def run(args) do
     {opts, positional, invalid} = OptionParser.parse(args, strict: @switches, aliases: @aliases)
+    check? = Keyword.get(opts, :check, false)
+    write? = Keyword.get(opts, :write, false)
 
     cond do
       invalid != [] ->
         Mix.raise("Invalid option(s): #{format_invalid_options(invalid)}")
 
       positional == [] ->
-        Mix.raise("Usage: mix selecto.domain.import priv/selecto/product.normalized.json --check")
+        Mix.raise(import_usage())
 
       length(positional) > 1 ->
-        Mix.raise("Usage: mix selecto.domain.import priv/selecto/product.normalized.json --check")
+        Mix.raise(import_usage())
 
-      not Keyword.get(opts, :check, false) ->
-        Mix.raise(
-          "Writing normalized domain imports is not implemented yet. Use --check to validate and preview the import plan."
-        )
+      check? and write? ->
+        Mix.raise("Choose either --check or --write, not both.")
+
+      not check? and not write? ->
+        Mix.raise(import_usage())
+
+      check? ->
+        check_import(List.first(positional), opts)
 
       true ->
-        check_import(List.first(positional), opts)
+        write_import(List.first(positional), opts)
     end
   end
 
@@ -62,7 +72,17 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
         print_plan(plan, opts)
 
       {:error, reason} ->
-        Mix.raise(DomainExport.format_error(reason))
+        Mix.raise(DomainImport.format_error(reason))
+    end
+  end
+
+  defp write_import(path, opts) do
+    case DomainImport.write_file(path, opts) do
+      {:ok, plan} ->
+        print_write(plan, opts)
+
+      {:error, reason} ->
+        Mix.raise(DomainImport.format_error(reason))
     end
   end
 
@@ -76,6 +96,19 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
 
       format ->
         Mix.raise("Unsupported import plan format #{inspect(format)}; expected text or json")
+    end
+  end
+
+  defp print_write(plan, opts) do
+    case Keyword.get(opts, :format, "text") do
+      "text" ->
+        print_text_write(plan)
+
+      "json" ->
+        IO.write(DomainImport.encode!(plan) <> "\n")
+
+      format ->
+        Mix.raise("Unsupported import write format #{inspect(format)}; expected text or json")
     end
   end
 
@@ -103,6 +136,22 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     if Keyword.get(opts, :source, false) do
       print_source_preview(Map.fetch!(plan, "source_preview"))
     end
+  end
+
+  defp print_text_write(plan) do
+    write = Map.fetch!(plan, "write")
+    validation = Map.fetch!(write, "source_validation")
+
+    Mix.shell().info(
+      "Wrote normalized domain import preview: #{Map.fetch!(write, "target_file")}"
+    )
+
+    Mix.shell().info("Target module: #{Map.fetch!(write, "target_module")}")
+    Mix.shell().info("Source validation: #{Map.get(validation, "syntax")}")
+    Mix.shell().info("domain/0 present: #{Map.get(validation, "domain_function_present")}")
+    Mix.shell().info("Runtime placeholders: #{Map.get(validation, "runtime_placeholder_count")}")
+    Mix.shell().info("Bytes: #{Map.fetch!(write, "bytes")}")
+    Mix.shell().info("Overwrote: #{Map.fetch!(write, "overwrote")}")
   end
 
   defp print_preview(preview, source_preview) do
@@ -221,5 +270,9 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
       {switch, value} -> "#{switch} #{value}"
     end)
     |> Enum.join(", ")
+  end
+
+  defp import_usage do
+    "Usage: mix selecto.domain.import priv/selecto/product.normalized.json --check or --write"
   end
 end

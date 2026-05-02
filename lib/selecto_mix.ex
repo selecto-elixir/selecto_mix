@@ -16,8 +16,8 @@ defmodule SelectoMix do
     exported views, and filter set persistence modules
   - **Domain Artifacts**: Exports normalized domain JSON artifacts for tools
     and round-trip checks
-  - **Domain Import Plans**: Checks non-writing import/readback plans for
-    normalized domain artifacts
+  - **Domain Import Plans**: Checks import/readback plans and can write
+    validated, placeholder-free domain previews from normalized artifacts
   - **Domain Inspection**: Generates Studio/tooling inspection JSON from
     normalized domain artifacts
   - **Domain Diagrams**: Generates Mermaid diagrams from domain inspection
@@ -35,7 +35,7 @@ defmodule SelectoMix do
   - `mix selecto.gen.filter_sets` - Generate filter set persistence
   - `mix selecto.domain.export` - Export normalized domain JSON artifacts
   - `mix selecto.domain.check` - Check normalized domain JSON artifacts
-  - `mix selecto.domain.import` - Check non-writing import plans for normalized artifacts
+  - `mix selecto.domain.import` - Check import plans or write validated previews for normalized artifacts
   - `mix selecto.domain.inspect` - Inspect normalized domain JSON artifacts
   - `mix selecto.domain.describe` - Generate Studio/tooling inspection JSON from normalized artifacts
   - `mix selecto.domain.diagram` - Generate Mermaid diagrams from domain inspection artifacts
