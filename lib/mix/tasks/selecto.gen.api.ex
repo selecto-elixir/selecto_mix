@@ -164,8 +164,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       alias Selecto
       alias SelectoUpdato
+      alias SelectoUpdato.DomainContract
 
       @allowed_actions ["insert", "update", "upsert", "delete"]
+      @operation_ids @allowed_actions
 
       @default_config %{
         name: "#{config.name_snake}",
@@ -177,6 +179,39 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       }
 
       def default_config, do: @default_config
+
+      def write_contract(config \\\\ @default_config, opts \\\\ []) do
+        config
+        |> contract_domain()
+        |> DomainContract.json_document(opts)
+      end
+
+      def write_contract_summary(config \\\\ @default_config) do
+        case write_contract(config) do
+          {:ok, contract, _diagnostics} ->
+            %{
+              operations: summarize_operation_contracts(Map.get(contract, "operations", [])),
+              fields: summarize_field_contracts(Map.get(contract, "fields", [])),
+              relationships:
+                summarize_relationship_contracts(Map.get(contract, "relationships", [])),
+              diagnostics: Map.get(contract, "diagnostics", %{})
+            }
+
+          {:error, diagnostics} ->
+            %{operations: %{}, fields: %{}, relationships: %{}, diagnostics: diagnostics}
+        end
+      end
+
+      def validate_intent(params, config \\\\ @default_config) when is_map(params) do
+        result = DomainContract.validate_intent(contract_domain(config), normalize_intent(params))
+
+        {:ok,
+         DomainContract.json_safe(%{
+           valid: Map.fetch!(result, :valid?),
+           errors: Map.get(result, :errors, []),
+           warnings: Map.get(result, :warnings, [])
+         })}
+      end
 
       def execute(params, config \\\\ @default_config) when is_map(params) do
         with :ok <- validate_write_params(params),
@@ -201,20 +236,20 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def get_by_id(id, config \\\\ @default_config, opts \\\\ []) do
         with :ok <- validate_id(id) do
-        primary_key = primary_key(config)
+          primary_key = primary_key(config)
 
-        params = %{
-          "filters" => [[to_string(primary_key), id]],
-          "limit" => 1,
-          "select" => Keyword.get(opts, :select)
-        }
+          params = %{
+            "filters" => [[to_string(primary_key), id]],
+            "limit" => 1,
+            "select" => Keyword.get(opts, :select)
+          }
 
-        with {:ok, %{rows: rows, aliases: aliases}} <- query(params, config) do
-          case rows do
-            [row | _] -> {:ok, %{row: row, aliases: aliases}}
-            _ -> {:error, :not_found}
+          with {:ok, %{rows: rows, aliases: aliases}} <- query(params, config) do
+            case rows do
+              [row | _] -> {:ok, %{row: row, aliases: aliases}}
+              _ -> {:error, :not_found}
+            end
           end
-        end
         end
       end
 
@@ -487,6 +522,151 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       defp normalize_attributes(_, _), do: %{}
 
+      defp normalize_intent(%{} = intent) do
+        intent
+        |> normalize_operation_alias()
+        |> normalize_attribute_alias()
+        |> normalize_record_fields()
+      end
+
+      defp normalize_operation_alias(intent) do
+        cond do
+          has_key?(intent, :operation) ->
+            intent
+
+          action = map_value(intent, :action) ->
+            action_id = to_string(action)
+
+            if action_id in @operation_ids do
+              intent
+              |> Map.delete(:action)
+              |> Map.delete("action")
+              |> put_intent_value(:operation, action_id)
+            else
+              intent
+            end
+
+          true ->
+            intent
+        end
+      end
+
+      defp normalize_attribute_alias(intent) do
+        cond do
+          has_key?(intent, :attrs) or has_key?(intent, :changes) or has_key?(intent, :set) ->
+            intent
+
+          attributes = map_value(intent, :attributes) ->
+            put_intent_value(intent, :attrs, attributes)
+
+          true ->
+            intent
+        end
+      end
+
+      defp normalize_record_fields(intent) do
+        cond do
+          has_key?(intent, :fields) or has_key?(intent, :attrs) or has_key?(intent, :changes) or
+              has_key?(intent, :set) ->
+            intent
+
+          records = map_value(intent, :records) ->
+            fields =
+              records
+              |> List.wrap()
+              |> Enum.flat_map(fn
+                record when is_map(record) -> Map.keys(record)
+                _record -> []
+              end)
+              |> Enum.map(&to_string/1)
+              |> Enum.uniq()
+
+            put_intent_value(intent, :fields, fields)
+
+          true ->
+            intent
+        end
+      end
+
+      defp put_intent_value(intent, key, value) do
+        if Enum.any?(Map.keys(intent), &is_binary/1) do
+          Map.put(intent, Atom.to_string(key), value)
+        else
+          Map.put(intent, key, value)
+        end
+      end
+
+      defp has_key?(map, key) when is_map(map) and is_atom(key) do
+        Map.has_key?(map, key) or Map.has_key?(map, Atom.to_string(key))
+      end
+
+      defp map_value(map, key, default \\\\ nil)
+
+      defp map_value(map, key, default) when is_map(map) and is_atom(key) do
+        string_key = Atom.to_string(key)
+
+        cond do
+          Map.has_key?(map, key) -> Map.get(map, key)
+          Map.has_key?(map, string_key) -> Map.get(map, string_key)
+          true -> default
+        end
+      end
+
+      defp map_value(_map, _key, default), do: default
+
+      defp summarize_operation_contracts(operations) when is_list(operations) do
+        Map.new(operations, fn operation ->
+          {Map.get(operation, "id"), Map.get(operation, "enabled", true)}
+        end)
+      end
+
+      defp summarize_operation_contracts(_operations), do: %{}
+
+      defp summarize_field_contracts(fields) when is_list(fields) do
+        Map.new(fields, fn field ->
+          {Map.get(field, "id"),
+           %{
+             type: Map.get(field, "type"),
+             insertable: Map.get(field, "insertable"),
+             updatable: Map.get(field, "updatable"),
+             immutable: Map.get(field, "immutable"),
+             write_once: Map.get(field, "write_once"),
+             required_on_insert: "insert" in Map.get(field, "required_on", []),
+             validators: Map.get(field, "validators", [])
+           }
+           |> compact_summary()}
+        end)
+      end
+
+      defp summarize_field_contracts(_fields), do: %{}
+
+      defp summarize_relationship_contracts(relationships) when is_list(relationships) do
+        Map.new(relationships, fn relationship ->
+          {Map.get(relationship, "id"),
+           %{
+             writable: Map.get(relationship, "writable"),
+             cardinality: Map.get(relationship, "cardinality"),
+             allowed_ops: Map.get(relationship, "allowed_ops", []),
+             required: Map.get(relationship, "required"),
+             min_items: Map.get(relationship, "min_items"),
+             max_items: Map.get(relationship, "max_items")
+           }
+           |> compact_summary()}
+        end)
+      end
+
+      defp summarize_relationship_contracts(_relationships), do: %{}
+
+      defp compact_summary(map) when is_map(map) do
+        map
+        |> Enum.reject(fn
+          {_key, nil} -> true
+          {_key, []} -> true
+          _entry -> false
+        end)
+        |> Map.new()
+      end
+
       defp to_existing_atom_safe(value) when is_binary(value) do
         try do
           String.to_existing_atom(value)
@@ -504,6 +684,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         |> Map.put(:source, config.schema_module)
         |> Map.put_new(:columns, columns)
       end
+
+      defp contract_domain(config), do: config.domain_module.domain()
     end
     """
   end
@@ -567,7 +749,22 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       def config(conn, _params) do
-        json(conn, success_envelope(conn, %{config: #{config.name_module}Api.default_config()}))
+        with :ok <- authorize_api_request(conn, :config),
+             {:ok, write_contract, _diagnostics} <- #{config.name_module}Api.write_contract() do
+          json(
+            conn,
+            success_envelope(conn, %{
+              config: #{config.name_module}Api.default_config(),
+              write_contract: write_contract,
+              capabilities: #{config.name_module}Api.write_contract_summary()
+            })
+          )
+        else
+          {:error, reason} ->
+            conn
+            |> put_status(status_for_reason(reason))
+            |> json(error_envelope(conn, reason))
+        end
       end
 
       defp authorize_api_request(_conn, _action), do: :ok
@@ -741,9 +938,13 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
             offset: 0
           }, pretty: true)
 
+        write_contract = #{config.name_module}Api.write_contract()
+
         {:ok,
          assign(socket,
            endpoint_config: #{config.name_module}Api.default_config(),
+           write_contract_summary: #{config.name_module}Api.write_contract_summary(),
+           write_contract_json: encode_contract_for_panel(write_contract),
            request_json: request_json,
            query_json: query_json,
            last_result: nil,
@@ -763,6 +964,20 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       def handle_event("send_request", _params, socket) do
         with {:ok, payload} <- Jason.decode(socket.assigns.request_json),
              {:ok, result} <- #{config.name_module}Api.execute(payload) do
+          {:noreply, assign(socket, last_result: Jason.encode!(result, pretty: true), error: nil)}
+        else
+          {:error, reason} ->
+            {:noreply,
+             assign(socket,
+               error: format_reason(reason),
+               last_result: nil
+             )}
+        end
+      end
+
+      def handle_event("validate_request", _params, socket) do
+        with {:ok, payload} <- Jason.decode(socket.assigns.request_json),
+             {:ok, result} <- #{config.name_module}Api.validate_intent(payload) do
           {:noreply, assign(socket, last_result: Jason.encode!(result, pretty: true), error: nil)}
         else
           {:error, reason} ->
@@ -804,6 +1019,57 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                 </dl>
               </section>
 
+              <section id="updato-write-contract" class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <h2 class="text-base font-medium text-slate-900">Write Contract</h2>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {diagnostics_status(@write_contract_summary.diagnostics)}
+                  </span>
+                </div>
+
+                <div class="mt-4">
+                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Operations</h3>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    <span
+                      :for={{operation, enabled} <- Enum.sort_by(@write_contract_summary.operations, fn {operation, _enabled} -> to_string(operation) end)}
+                      data-operation-id={operation}
+                      class={[
+                        "rounded-full px-3 py-1 text-xs font-medium",
+                        if(enabled,
+                          do: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+                          else: "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                        )
+                      ]}
+                    >
+                      {operation}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="mt-5">
+                  <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Writable Fields</h3>
+                  <div class="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div
+                      :for={{field, field_config} <- @write_contract_summary.fields |> Enum.sort_by(fn {field, _field_config} -> to_string(field) end) |> Enum.take(12)}
+                      data-field-id={field}
+                      class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+                    >
+                      <div class="font-semibold text-slate-900">{field}</div>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        <span :if={field_config.insertable} class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">insert</span>
+                        <span :if={field_config.updatable} class="rounded bg-sky-100 px-1.5 py-0.5 text-sky-700">update</span>
+                        <span :if={field_config.required_on_insert} class="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">required</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <details class="mt-5">
+                  <summary class="cursor-pointer text-sm font-medium text-slate-700">Contract JSON</summary>
+                  <pre id="updato-write-contract-json" class="mt-3 max-h-80 overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">{@write_contract_json}</pre>
+                </details>
+              </section>
+
               <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
                 <h2 class="text-base font-medium text-slate-900">Write Request JSON</h2>
                 <form phx-change="request_changed">
@@ -814,6 +1080,13 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                 </form>
 
                 <div class="mt-4 flex items-center gap-3">
+                  <button
+                    phx-click="validate_request"
+                    class="inline-flex items-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                  >
+                    Validate Write Request
+                  </button>
+
                   <button
                     phx-click="send_request"
                     class="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -858,6 +1131,20 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         \"\"\"
       end
 
+      defp encode_contract_for_panel({:ok, contract, _diagnostics}) do
+        Jason.encode!(contract, pretty: true)
+      end
+
+      defp encode_contract_for_panel({:error, diagnostics}) do
+        Jason.encode!(%{error: "write contract unavailable", diagnostics: inspect(diagnostics)}, pretty: true)
+      end
+
+      defp diagnostics_status(%{} = diagnostics) do
+        Map.get(diagnostics, "status") || Map.get(diagnostics, :status) || "projected"
+      end
+
+      defp diagnostics_status(_diagnostics), do: "unavailable"
+
       defp format_reason(reason) when is_binary(reason), do: reason
       defp format_reason(reason), do: inspect(reason)
     end
@@ -873,8 +1160,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           pipe_through :api
           post "#{config.api_path |> String.replace_prefix("/api", "")}", #{config.name_module}ApiController, :create
           post "#{config.api_path |> String.replace_prefix("/api", "")}/query", #{config.name_module}ApiController, :query
-          get "#{config.api_path |> String.replace_prefix("/api", "")}/:id", #{config.name_module}ApiController, :show
           get "#{config.api_path |> String.replace_prefix("/api", "")}/config", #{config.name_module}ApiController, :config
+          get "#{config.api_path |> String.replace_prefix("/api", "")}/:id", #{config.name_module}ApiController, :show
         end
 
     #{panel_route_snippet(config)}
