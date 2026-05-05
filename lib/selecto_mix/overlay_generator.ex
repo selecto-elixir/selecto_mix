@@ -27,6 +27,7 @@ defmodule SelectoMix.OverlayGenerator do
     redaction_example = generate_redaction_example(config)
     jsonb_examples = generate_jsonb_schema_examples(config)
     query_member_examples = generate_query_member_examples_dsl()
+    write_contract_examples = generate_write_contract_examples_dsl(config)
 
     """
     defmodule #{overlay_module_name} do
@@ -45,6 +46,7 @@ defmodule SelectoMix.OverlayGenerator do
        - Register named UDFs with `deffunction`
        - Define JSONB schemas for structured data columns
        - Define named query members (CTE/VALUES/subquery/LATERAL/UNNEST presets)
+       - Define write contracts, actions, and capabilities for Updato/tooling
        - Add domain-specific validations (future)
       - Configure custom transformations (future)
 
@@ -120,6 +122,23 @@ defmodule SelectoMix.OverlayGenerator do
             ordinality "tag_position"
           end
 
+          # Write contract metadata
+          defwrite_operation :update do
+            enabled true
+            require_filter true
+            returning :record
+          end
+
+          defwrite_field :name do
+            insertable true
+            updatable true
+            required_on [:insert]
+          end
+
+          defcapability "entity.write" do
+            operations [:insert, :update]
+          end
+
       ## How It Works
 
       The DSL compiles into an overlay configuration map that is merged with the
@@ -147,6 +166,7 @@ defmodule SelectoMix.OverlayGenerator do
       # Uncomment and register domain UDFs
     #{function_examples}
     #{query_member_examples}
+    #{write_contract_examples}
     #{jsonb_examples}
     end
     """
@@ -409,6 +429,57 @@ defmodule SelectoMix.OverlayGenerator do
       # end
     """
     |> String.trim_trailing()
+  end
+
+  defp generate_write_contract_examples_dsl(config) do
+    field_name =
+      config
+      |> extract_columns()
+      |> writable_example_field()
+
+    """
+
+      # Optional write contract metadata (projected by SelectoUpdato.DomainContract)
+      # defwrite_operation :insert do
+      #   enabled true
+      #   returning :record
+      # end
+
+      # defwrite_operation :update do
+      #   enabled true
+      #   require_filter true
+      #   returning :record
+      # end
+
+      # defwrite_field :#{field_name} do
+      #   insertable true
+      #   updatable true
+      #   required_on [:insert]
+      # end
+
+      # defcapability "entity.write" do
+      #   operations [:insert, :update]
+      # end
+    """
+    |> String.trim_trailing()
+  end
+
+  defp writable_example_field(columns) do
+    fields =
+      columns
+      |> Enum.reject(fn {field_name, _column_config} ->
+        to_string(field_name) in ["id", "inserted_at", "updated_at"]
+      end)
+
+    Enum.find_value(fields, fn {field_name, column_config} ->
+      if Map.get(column_config, :type) == :string, do: field_name
+    end) ||
+      fields
+      |> List.first()
+      |> case do
+        {field_name, _column_config} -> field_name
+        nil -> :field_name
+      end
   end
 
   defp humanize(atom_or_string) do

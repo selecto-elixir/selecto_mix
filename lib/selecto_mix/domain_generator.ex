@@ -45,6 +45,7 @@ defmodule SelectoMix.DomainGenerator do
       - Customize column display properties (labels, formats, aggregations)
       - Add redaction to sensitive fields
       - Define custom filters
+      - Define write contracts, actions, and capabilities
       - Add domain-specific validations (future)
 
       Your overlay customizations are preserved when you regenerate this file.
