@@ -213,6 +213,35 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
          })}
       end
 
+      def write_template_operations(config \\\\ @default_config) do
+        operations =
+          config
+          |> write_contract_summary()
+          |> Map.get(:operations, %{})
+          |> Enum.filter(fn {_operation, enabled} -> enabled == true end)
+          |> Enum.map(fn {operation, _enabled} -> operation end)
+          |> Enum.sort()
+
+        case operations do
+          [] -> @allowed_actions
+          operations -> operations
+        end
+      end
+
+      def write_request_template(operation \\\\ "insert", config \\\\ @default_config) do
+        operation = normalize_action(operation)
+
+        operation
+        |> build_write_template(write_contract_summary(config))
+        |> DomainContract.json_safe()
+      end
+
+      def write_request_template_json(operation \\\\ "insert", config \\\\ @default_config) do
+        operation
+        |> write_request_template(config)
+        |> Jason.encode!(pretty: true)
+      end
+
       def execute(params, config \\\\ @default_config) when is_map(params) do
         with :ok <- validate_write_params(params),
              {:ok, operation} <- build_operation(params, config),
@@ -667,6 +696,101 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         |> Map.new()
       end
 
+      defp build_write_template(operation, summary) do
+        %{action: operation, filters: default_template_filters(operation)}
+        |> maybe_put_template_attributes(operation, template_attributes(operation, summary.fields))
+        |> maybe_put_confirm_bulk_delete(operation)
+      end
+
+      defp default_template_filters(operation)
+           when operation in ["update", "upsert", "delete", "soft_delete"] do
+        [%{field: "id", value: ""}]
+      end
+
+      defp default_template_filters(_operation), do: []
+
+      defp maybe_put_template_attributes(payload, operation, _attributes)
+           when operation in ["delete", "soft_delete"] do
+        payload
+      end
+
+      defp maybe_put_template_attributes(payload, _operation, attributes) do
+        Map.put(payload, :attributes, attributes)
+      end
+
+      defp maybe_put_confirm_bulk_delete(payload, "delete") do
+        Map.put(payload, :confirm_bulk_delete, false)
+      end
+
+      defp maybe_put_confirm_bulk_delete(payload, _operation), do: payload
+
+      defp template_attributes(operation, fields) when is_map(fields) do
+        fields
+        |> template_fields(operation)
+        |> Map.new(fn {field, config} ->
+          {field, sample_template_value(Map.get(config, :type))}
+        end)
+      end
+
+      defp template_attributes(_operation, _fields), do: %{}
+
+      defp template_fields(fields, operation)
+           when operation in ["insert", "insert_all", "insert_from_query"] do
+        required_fields =
+          fields
+          |> Enum.filter(fn {_field, config} ->
+            Map.get(config, :insertable) == true and
+              Map.get(config, :required_on_insert) == true
+          end)
+          |> sort_template_fields()
+
+        case required_fields do
+          [] -> fields |> writable_template_fields(:insertable) |> Enum.take(8)
+          fields -> fields
+        end
+      end
+
+      defp template_fields(fields, operation) when operation in ["update", "soft_delete"] do
+        fields
+        |> writable_template_fields(:updatable)
+        |> Enum.take(8)
+      end
+
+      defp template_fields(fields, operation) when operation in ["upsert", "upsert_all"] do
+        fields
+        |> Enum.filter(fn {_field, config} ->
+          Map.get(config, :insertable) == true or Map.get(config, :updatable) == true
+        end)
+        |> sort_template_fields()
+        |> Enum.take(8)
+      end
+
+      defp template_fields(fields, _operation) do
+        fields
+        |> writable_template_fields(:insertable)
+        |> Enum.take(8)
+      end
+
+      defp writable_template_fields(fields, flag) do
+        fields
+        |> Enum.filter(fn {_field, config} -> Map.get(config, flag) == true end)
+        |> sort_template_fields()
+      end
+
+      defp sort_template_fields(fields) do
+        Enum.sort_by(fields, fn {field, _config} -> to_string(field) end)
+      end
+
+      defp sample_template_value(type) do
+        case type |> to_string() |> String.downcase() do
+          "integer" -> 0
+          "float" -> 0.0
+          "decimal" -> "0.0"
+          "boolean" -> false
+          _type -> ""
+        end
+      end
+
       defp to_existing_atom_safe(value) when is_binary(value) do
         try do
           String.to_existing_atom(value)
@@ -922,13 +1046,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       @impl true
       def mount(_params, _session, socket) do
-        request_json =
-          Jason.encode!(%{
-            action: "insert",
-            attributes: %{},
-            filters: []
-          }, pretty: true)
-
         query_json =
           Jason.encode!(%{
             select: [],
@@ -945,7 +1062,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
            endpoint_config: #{config.name_module}Api.default_config(),
            write_contract_summary: #{config.name_module}Api.write_contract_summary(),
            write_contract_json: encode_contract_for_panel(write_contract),
-           request_json: request_json,
+           write_template_operations: #{config.name_module}Api.write_template_operations(),
+           request_json: #{config.name_module}Api.write_request_template_json("insert"),
            query_json: query_json,
            last_result: nil,
            error: nil
@@ -955,6 +1073,15 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       @impl true
       def handle_event("request_changed", %{"request_json" => request_json}, socket) do
         {:noreply, assign(socket, request_json: request_json)}
+      end
+
+      def handle_event("use_write_template", %{"operation" => operation}, socket) do
+        {:noreply,
+         assign(socket,
+           request_json: #{config.name_module}Api.write_request_template_json(operation),
+           error: nil,
+           last_result: nil
+         )}
       end
 
       def handle_event("query_changed", %{"query_json" => query_json}, socket) do
@@ -1072,6 +1199,19 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
               <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
                 <h2 class="text-base font-medium text-slate-900">Write Request JSON</h2>
+                <div id="updato-write-templates" class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    :for={operation <- @write_template_operations}
+                    type="button"
+                    phx-click="use_write_template"
+                    phx-value-operation={operation}
+                    data-template-operation={operation}
+                    class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                  >
+                    {operation}
+                  </button>
+                </div>
+
                 <form phx-change="request_changed">
                   <textarea
                     name="request_json"

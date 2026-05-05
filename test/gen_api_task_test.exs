@@ -32,13 +32,21 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
       assert api_module =~ "def validate_intent(params, config \\\\ @default_config)"
+      assert api_module =~ "def write_template_operations(config \\\\ @default_config)"
+
+      assert api_module =~
+               "def write_request_template(operation \\\\ \"insert\", config \\\\ @default_config)"
+
       assert api_module =~ "|> DomainContract.json_document(opts)"
 
       assert controller =~ "write_contract: write_contract"
       assert controller =~ "capabilities: OrderApi.write_contract_summary()"
 
       assert control_panel =~ ~s(id="updato-write-contract")
+      assert control_panel =~ ~s(id="updato-write-templates")
       assert control_panel =~ "OrderApi.write_contract()"
+      assert control_panel =~ "OrderApi.write_request_template_json(\"insert\")"
+      assert control_panel =~ ~s(phx-click="use_write_template")
       assert control_panel =~ ~s(phx-click="validate_request")
 
       config_index = output_index(output, ~s(get "/v1/updato/orders/config"))
