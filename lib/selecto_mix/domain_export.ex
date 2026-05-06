@@ -9,6 +9,14 @@ defmodule SelectoMix.DomainExport do
 
   @format "selecto.normalized_domain"
   @format_version 1
+  @security_sensitive_sections %{
+    "actions" => "business command definitions and execution surfaces",
+    "capabilities" => "authorization capability catalog",
+    "choice_sources" => "cross-domain choices and constraint policy",
+    "detail_actions" => "user-visible detail actions",
+    "source_relationships" => "cross-domain source bindings",
+    "writes" => "write operations, fields, validations, constraints, and transitions"
+  }
 
   @type export_error ::
           :selecto_domain_unavailable
@@ -90,6 +98,7 @@ defmodule SelectoMix.DomainExport do
       sections: sections_summary(artifact_diagnostics, current_diagnostics),
       counts: counts_summary(domain),
       registries: registries_summary(domain),
+      security_review: security_review_summary(domain),
       choice_source_policies: choice_source_policy_summary(domain),
       diagnostics: %{
         artifact: diagnostics_summary(artifact_diagnostics),
@@ -390,6 +399,66 @@ defmodule SelectoMix.DomainExport do
   end
 
   defp choice_source_policy(_choice_source), do: ""
+
+  defp security_review_summary(domain) do
+    [
+      security_registry("actions", domain),
+      security_registry("capabilities", domain),
+      security_registry("choice_sources", domain),
+      security_registry("detail_actions", domain),
+      security_registry("source_relationships", domain),
+      security_writes(map_get(domain, "writes", %{}))
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp security_registry(section, domain) do
+    items =
+      domain
+      |> map_get(section, %{})
+      |> registry_names()
+
+    case items do
+      [] ->
+        nil
+
+      items ->
+        %{
+          section: section,
+          count: length(items),
+          items: items,
+          reason: Map.fetch!(@security_sensitive_sections, section)
+        }
+    end
+  end
+
+  defp security_writes(writes) when is_map(writes) do
+    items = %{
+      "operations" => registry_names(writes, "operations"),
+      "fields" => registry_names(writes, "fields"),
+      "transitions" => registry_names(writes, "transitions"),
+      "validations_count" => writes |> map_get("validations", []) |> count_list(),
+      "constraints_count" => writes |> map_get("constraints", []) |> count_list()
+    }
+
+    count =
+      length(Map.fetch!(items, "operations")) +
+        length(Map.fetch!(items, "fields")) +
+        length(Map.fetch!(items, "transitions")) +
+        Map.fetch!(items, "validations_count") +
+        Map.fetch!(items, "constraints_count")
+
+    if count > 0 do
+      %{
+        section: "writes",
+        count: count,
+        items: items,
+        reason: Map.fetch!(@security_sensitive_sections, "writes")
+      }
+    end
+  end
+
+  defp security_writes(_writes), do: nil
 
   defp diagnostics_summary(diagnostics) do
     errors = diagnostic_items(diagnostics, :errors)

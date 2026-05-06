@@ -744,6 +744,13 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert output =~
                "capabilities: item.archive, item.filter, item.member, item.name, item.rank, item.view"
+
+      assert output =~ "Security Review:"
+      assert output =~ "actions: 1 (archive)"
+      assert output =~ "choice_sources: 1 (owner_choices)"
+
+      assert output =~
+               "writes: 5 (operations: update; fields: name; transitions: status; validations: 1; constraints: 1)"
     end)
   end
 
@@ -804,6 +811,14 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert docs =~ "# Capability Items"
       assert docs =~ "## Choice Source Details"
       assert docs =~ "| owner_choices | users | id | name | domain_of_interest=fail_closed |"
+      assert docs =~ "## Security Review"
+
+      assert docs =~
+               "| choice_sources | 1 | owner_choices | cross-domain choices and constraint policy |"
+
+      assert docs =~
+               "| writes | 5 | operations: update; fields: name; transitions: status; validations: 1; constraints: 1 | write operations, fields, validations, constraints, and transitions |"
+
       assert docs =~ "## Capability Usage"
       assert docs =~ "| Capability | Role | Section | Target | Path |"
       assert docs =~ "| item.name | field | source | name | source.columns.name.capability |"

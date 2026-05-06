@@ -74,6 +74,7 @@ defmodule SelectoMix.DomainDocs do
       schemas_section(domain),
       registries_section(domain),
       choice_source_details_section(domain),
+      security_review_section(summary),
       query_members_section(domain),
       capability_usage_section(domain),
       diagnostics_section(summary)
@@ -287,6 +288,30 @@ defmodule SelectoMix.DomainDocs do
   end
 
   defp query_member_rows(_group, _members), do: []
+
+  defp security_review_section(summary) do
+    security_review = Map.get(summary, :security_review, [])
+
+    if security_review == [] do
+      []
+    else
+      [
+        "## Security Review",
+        "",
+        "| Section | Count | Items | Reason |",
+        "| --- | ---: | --- | --- |"
+      ] ++
+        Enum.map(security_review, fn section ->
+          table_row([
+            Map.fetch!(section, :section),
+            Map.fetch!(section, :count),
+            format_security_items(Map.fetch!(section, :items)),
+            Map.fetch!(section, :reason)
+          ])
+        end) ++
+        [""]
+    end
+  end
 
   defp capability_usage_section(domain) do
     usage = capability_usage(domain)
@@ -547,6 +572,20 @@ defmodule SelectoMix.DomainDocs do
   end
 
   defp format_list(value), do: to_string(value)
+
+  defp format_security_items(items) when is_map(items) do
+    [
+      {"operations", format_list(Map.get(items, "operations", []))},
+      {"fields", format_list(Map.get(items, "fields", []))},
+      {"transitions", format_list(Map.get(items, "transitions", []))},
+      {"validations", Map.get(items, "validations_count", 0)},
+      {"constraints", Map.get(items, "constraints_count", 0)}
+    ]
+    |> Enum.map(fn {label, value} -> "#{label}: #{value}" end)
+    |> Enum.join("; ")
+  end
+
+  defp format_security_items(items), do: format_list(items)
 
   defp format_path(path) when is_list(path) do
     Enum.map_join(path, ".", &to_string/1)

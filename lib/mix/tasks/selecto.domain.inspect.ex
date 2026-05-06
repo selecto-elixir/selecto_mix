@@ -93,6 +93,7 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     print_sections(Map.fetch!(summary, :sections))
     print_counts(Map.fetch!(summary, :counts))
     print_registries(Map.fetch!(summary, :registries))
+    print_security_review(Map.get(summary, :security_review, []))
     print_diagnostics(Map.fetch!(summary, :diagnostics))
   end
 
@@ -123,6 +124,25 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     end)
   end
 
+  defp print_security_review([]) do
+    Mix.shell().info("")
+    Mix.shell().info("Security Review:")
+    Mix.shell().info("  (none)")
+  end
+
+  defp print_security_review(sections) do
+    Mix.shell().info("")
+    Mix.shell().info("Security Review:")
+
+    Enum.each(sections, fn section ->
+      Mix.shell().info(
+        "  #{Map.fetch!(section, :section)}: #{Map.fetch!(section, :count)} (#{format_security_items(Map.fetch!(section, :items))})"
+      )
+
+      Mix.shell().info("    #{Map.fetch!(section, :reason)}")
+    end)
+  end
+
   defp print_diagnostics(diagnostics) do
     Mix.shell().info("")
     Mix.shell().info("Diagnostics:")
@@ -144,6 +164,20 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
 
   defp format_list([]), do: "(none)"
   defp format_list(values), do: Enum.join(values, ", ")
+
+  defp format_security_items(items) when is_map(items) do
+    [
+      {"operations", format_list(Map.get(items, "operations", []))},
+      {"fields", format_list(Map.get(items, "fields", []))},
+      {"transitions", format_list(Map.get(items, "transitions", []))},
+      {"validations", Map.get(items, "validations_count", 0)},
+      {"constraints", Map.get(items, "constraints_count", 0)}
+    ]
+    |> Enum.map(fn {label, value} -> "#{label}: #{value}" end)
+    |> Enum.join("; ")
+  end
+
+  defp format_security_items(items), do: format_list(items)
 
   defp format_key(key) do
     key
