@@ -93,6 +93,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert is_integer(config_index)
       assert is_integer(show_index)
       assert config_index < show_index
+      assert output =~ "For choice-backed write fields"
+      assert output =~ "socket/session state, not browser parameters"
     end)
   end
 

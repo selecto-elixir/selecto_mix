@@ -71,6 +71,35 @@ The generated router notice includes the LiveView route plus optional
 `query-contract.json`, a compact Markdown `query-guide.md`, and a
 non-executing query intent validator.
 
+Generate an Updato API endpoint and control panel:
+
+```bash
+mix selecto.gen.api products --domain MyApp.SelectoDomains.ProductDomain --schema MyApp.Catalog.Product
+```
+
+Generated Updato control panels can render write fields backed by Selecto
+`choice_sources`. To enable option loading and membership validation, assign
+choice-source resolvers and scope from the LiveView socket or session:
+
+```elixir
+socket
+|> assign(
+  choice_source_domain: MyApp.SelectoDomains.ProductChoiceSources.domain(),
+  choice_source_options_resolver: &MyApp.SelectoDomains.ProductChoiceSources.resolve_options/1,
+  choice_source_membership_resolver: &MyApp.SelectoDomains.ProductChoiceSources.resolve_membership/1,
+  choice_source_value_parser: &MyApp.SelectoDomains.ProductChoiceSources.parse_value/2,
+  choice_source_scope: %{
+    actor: socket.assigns.current_scope.user,
+    tenant: socket.assigns.current_scope.user.account_id,
+    context: %{surface: :updato_control_panel}
+  }
+)
+```
+
+Keep actor, tenant, and required domain filters server-owned. Browser payloads
+may provide search text or a selected id, but they should not be trusted for
+tenant or authorization scope.
+
 ## Core Workflow
 
 Recommended workflow:

@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
   - Selecto-powered read/query handlers
   - a Phoenix controller for the API endpoint
   - a LiveView control panel for editing configuration and sending requests
+  - choice-source picker hooks for write fields when the domain declares them
 
   ## Usage
 
@@ -24,6 +25,11 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     * `--force` - Overwrite generated files
 
   The task prints route snippets to add into your `router.ex`.
+
+  For choice-backed write fields, keep option and membership validation
+  resolvers server-owned. Assign `:choice_source_options_resolver`,
+  `:choice_source_membership_resolver`, and `:choice_source_scope` from the
+  generated LiveView using socket/session data rather than browser parameters.
   """
 
   use Mix.Task
@@ -1916,6 +1922,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     Next steps:
       1. Wire routes in your router using the snippet above.
       2. Start your server and open #{config.panel_path}.
+      3. For choice-backed write fields, assign choice-source options and membership resolvers in the generated LiveView.
+         Derive actor, tenant, and required filters from socket/session state, not browser parameters.
     """)
   end
 end
