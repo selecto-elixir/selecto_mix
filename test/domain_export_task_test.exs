@@ -968,9 +968,27 @@ defmodule SelectoMix.DomainExportTaskTest do
         |> put_in(["domain", "writes", "constraints"], [])
         |> update_in(["domain", "actions"], &Map.put(&1, "publish", %{}))
         |> update_in(["domain", "capabilities"], &Map.delete(&1, "item.rank"))
+        |> put_in(
+          ["domain", "choice_sources", "owner_choices", "constraint_policy"],
+          %{"domain_of_interest" => "best_effort"}
+        )
 
       File.write!("left.normalized.json", SelectoMix.DomainExport.encode!(artifact))
       File.write!("right.normalized.json", SelectoMix.DomainExport.encode!(changed_artifact))
+
+      assert {:ok, diff} =
+               SelectoMix.DomainExport.diff_files(
+                 "left.normalized.json",
+                 "right.normalized.json"
+               )
+
+      assert diff.choice_source_policies.changed == [
+               %{
+                 id: "owner_choices",
+                 left: "domain_of_interest=fail_closed",
+                 right: "domain_of_interest=best_effort"
+               }
+             ]
 
       output =
         capture_io(fn ->
@@ -1000,6 +1018,10 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "+ publish"
       assert output =~ "capabilities:"
       assert output =~ "- item.rank"
+      assert output =~ "Choice Source Policies:"
+
+      assert output =~
+               "owner_choices: domain_of_interest=fail_closed -> domain_of_interest=best_effort"
     end)
   end
 

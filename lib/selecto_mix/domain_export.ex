@@ -90,6 +90,7 @@ defmodule SelectoMix.DomainExport do
       sections: sections_summary(artifact_diagnostics, current_diagnostics),
       counts: counts_summary(domain),
       registries: registries_summary(domain),
+      choice_source_policies: choice_source_policy_summary(domain),
       diagnostics: %{
         artifact: diagnostics_summary(artifact_diagnostics),
         current: diagnostics_summary(current_diagnostics)
@@ -111,6 +112,12 @@ defmodule SelectoMix.DomainExport do
     counts = count_diff(Map.fetch!(left, :counts), Map.fetch!(right, :counts))
     registries = diff_group(Map.fetch!(left, :registries), Map.fetch!(right, :registries))
 
+    choice_source_policies =
+      choice_source_policy_diff(
+        Map.get(left, :choice_source_policies, %{}),
+        Map.get(right, :choice_source_policies, %{})
+      )
+
     diagnostics = %{
       artifact:
         diagnostic_summary_diff(
@@ -130,6 +137,7 @@ defmodule SelectoMix.DomainExport do
       sections: sections,
       counts: counts,
       registries: registries,
+      choice_source_policies: choice_source_policies,
       diagnostics: diagnostics
     }
 
@@ -361,6 +369,28 @@ defmodule SelectoMix.DomainExport do
     }
   end
 
+  defp choice_source_policy_summary(domain) do
+    case map_get(domain, "choice_sources", %{}) do
+      choice_sources when is_map(choice_sources) ->
+        choice_sources
+        |> Enum.map(fn {id, choice_source} ->
+          {to_string(id), choice_source_policy(choice_source)}
+        end)
+        |> Map.new()
+
+      _choice_sources ->
+        %{}
+    end
+  end
+
+  defp choice_source_policy(choice_source) when is_map(choice_source) do
+    choice_source
+    |> map_get("constraint_policy", %{})
+    |> format_policy()
+  end
+
+  defp choice_source_policy(_choice_source), do: ""
+
   defp diagnostics_summary(diagnostics) do
     errors = diagnostic_items(diagnostics, :errors)
     warnings = diagnostic_items(diagnostics, :warnings)
@@ -481,6 +511,30 @@ defmodule SelectoMix.DomainExport do
     }
   end
 
+  defp choice_source_policy_diff(left, right) do
+    common_ids =
+      left
+      |> Map.keys()
+      |> MapSet.new()
+      |> MapSet.intersection(right |> Map.keys() |> MapSet.new())
+      |> MapSet.to_list()
+      |> Enum.sort()
+
+    changed =
+      Enum.flat_map(common_ids, fn id ->
+        left_policy = Map.get(left, id, "")
+        right_policy = Map.get(right, id, "")
+
+        if left_policy == right_policy do
+          []
+        else
+          [%{id: id, left: left_policy, right: right_policy}]
+        end
+      end)
+
+    %{changed: changed}
+  end
+
   defp count_item_diff(left, right, key) do
     left_value = numeric_value(Map.get(left, key, 0))
     right_value = numeric_value(Map.get(right, key, 0))
@@ -517,12 +571,28 @@ defmodule SelectoMix.DomainExport do
   defp numeric_value(value) when is_number(value), do: value
   defp numeric_value(_value), do: 0
 
+  defp format_policy(policy) when is_map(policy) do
+    policy
+    |> Enum.map(fn {key, value} -> "#{format_policy_part(key)}=#{format_policy_part(value)}" end)
+    |> Enum.sort()
+    |> Enum.join(", ")
+  end
+
+  defp format_policy(_policy), do: ""
+
+  defp format_policy_part(value) when is_binary(value), do: value
+  defp format_policy_part(value) when is_atom(value), do: Atom.to_string(value)
+  defp format_policy_part(value), do: inspect(value)
+
   defp diff_changed?(diff) do
     changed_diff_group?(Map.fetch!(diff, :sections)) or
       changed_count_diff?(Map.fetch!(diff, :counts)) or
       changed_diff_group?(Map.fetch!(diff, :registries)) or
+      changed_choice_source_policy_diff?(Map.fetch!(diff, :choice_source_policies)) or
       changed_diagnostics_diff?(Map.fetch!(diff, :diagnostics))
   end
+
+  defp changed_choice_source_policy_diff?(%{changed: changed}), do: changed != []
 
   defp changed_diff_group?(group) do
     Enum.any?(group, fn {_key, %{added: added, removed: removed}} ->

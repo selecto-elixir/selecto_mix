@@ -5,7 +5,8 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
 
   The task reads two artifacts produced by `mix selecto.domain.export`, verifies
   them, and compares section classifications, counts, registry names, and
-  diagnostic counts/codes across query and operational domain sections.
+  diagnostic counts/codes across query and operational domain sections. It also
+  reports changed constraint policies for existing choice sources.
 
   ## Examples
 
@@ -94,6 +95,7 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
       print_sections(Map.fetch!(diff, :sections))
       print_counts(Map.fetch!(diff, :counts))
       print_registries(Map.fetch!(diff, :registries))
+      print_choice_source_policies(Map.fetch!(diff, :choice_source_policies))
       print_diagnostics(Map.fetch!(diff, :diagnostics))
     else
       Mix.shell().info("No differences found.")
@@ -159,6 +161,23 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
     print_diagnostic_diff("current", Map.fetch!(diagnostics, :current))
   end
 
+  defp print_choice_source_policies(%{changed: []}) do
+    Mix.shell().info("")
+    Mix.shell().info("Choice Source Policies:")
+    Mix.shell().info("  (none)")
+  end
+
+  defp print_choice_source_policies(%{changed: changed}) do
+    Mix.shell().info("")
+    Mix.shell().info("Choice Source Policies:")
+
+    Enum.each(changed, fn change ->
+      Mix.shell().info(
+        "  #{Map.fetch!(change, :id)}: #{policy_value(Map.fetch!(change, :left))} -> #{policy_value(Map.fetch!(change, :right))}"
+      )
+    end)
+  end
+
   defp print_diagnostic_diff(label, diagnostics) do
     Mix.shell().info("  #{label}:")
     print_count_change("errors", Map.fetch!(diagnostics, :errors))
@@ -212,6 +231,10 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
 
   defp format_delta(delta) when delta > 0, do: "+#{delta}"
   defp format_delta(delta), do: to_string(delta)
+
+  defp policy_value(""), do: "(none)"
+  defp policy_value(nil), do: "(none)"
+  defp policy_value(value), do: value
 
   defp format_key(key) do
     key
