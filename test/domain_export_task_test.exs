@@ -1022,6 +1022,14 @@ defmodule SelectoMix.DomainExportTaskTest do
               "id" => "customer_choices",
               "path" => ["choice_sources", "customer_choices", "capability"]
             }
+          ],
+          "security_review" => [
+            %{
+              "section" => "choice_sources",
+              "count" => 1,
+              "items" => ["customer_choices"],
+              "reason" => "cross-domain choices and constraint policy"
+            }
           ]
         },
         "diagnostics" => %{"errors" => [], "warnings" => []}
@@ -1059,6 +1067,12 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert diagram =~
                "capuse_choice_sources_customer_choices_capability -. requires .-> cap_customer_choose"
+
+      assert diagram =~ ~s(subgraph security_review["Security Review"])
+      assert diagram =~ "Security review: choice_sources"
+      assert diagram =~ "items: customer_choices"
+      assert diagram =~ "cross-domain choices and constraint policy"
+      assert diagram =~ "domain -. review .-> review_choice_sources"
     end)
   end
 

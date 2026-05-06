@@ -37,6 +37,7 @@ defmodule SelectoMix.DomainDiagram do
     field_bindings = map_get(inspection, "field_choice_bindings", []) |> list_or_empty()
     capabilities = map_get(inspection, "capabilities", []) |> list_or_empty()
     capability_usage = map_get(inspection, "capability_usage", []) |> list_or_empty()
+    security_review = map_get(inspection, "security_review", []) |> list_or_empty()
 
     [
       "flowchart LR",
@@ -47,6 +48,7 @@ defmodule SelectoMix.DomainDiagram do
       choice_source_section(choice_sources, relationships),
       field_binding_section(field_bindings, choice_sources),
       capability_section(capabilities, capability_usage),
+      security_review_section(security_review),
       class_defs()
     ]
     |> List.flatten()
@@ -254,6 +256,26 @@ defmodule SelectoMix.DomainDiagram do
       usage_edges
   end
 
+  defp security_review_section([]), do: []
+
+  defp security_review_section(security_review) do
+    nodes =
+      security_review
+      |> sort_by_section()
+      |> Enum.map(fn review ->
+        node(security_review_node_id(review), security_review_label(review), "    ")
+      end)
+
+    edges =
+      security_review
+      |> sort_by_section()
+      |> Enum.map(fn review ->
+        edge("domain", security_review_node_id(review), "review")
+      end)
+
+    ["", ~s(  subgraph security_review["Security Review"])] ++ nodes ++ ["  end"] ++ edges
+  end
+
   defp relationship_edge(_choice_node, nil, _relationship_ids), do: nil
 
   defp relationship_edge(choice_node, relationship_id, relationship_ids) do
@@ -394,6 +416,7 @@ defmodule SelectoMix.DomainDiagram do
   defp choice_source_node_id(choice_source), do: node_id("choice", map_get(choice_source, "id"))
   defp field_binding_node_id(binding), do: node_id("binding", map_get(binding, "field"))
   defp capability_node_id(capability), do: node_id("cap", capability)
+  defp security_review_node_id(review), do: node_id("review", map_get(review, "section"))
 
   defp capability_usage_node_id(usage) do
     usage_path =
@@ -448,6 +471,10 @@ defmodule SelectoMix.DomainDiagram do
     end)
   end
 
+  defp sort_by_section(values) do
+    Enum.sort_by(values, &to_string(map_get(&1, "section", "")))
+  end
+
   defp capability_label(capability_id, capability) do
     operations =
       capability
@@ -466,6 +493,16 @@ defmodule SelectoMix.DomainDiagram do
       usage_role_label(map_get(usage, "role"), map_get(usage, "id") || map_get(usage, "field")),
       map_get(usage, "section") && "section: #{map_get(usage, "section")}",
       map_get(usage, "group") && "group: #{map_get(usage, "group")}"
+    ]
+    |> compact_join()
+  end
+
+  defp security_review_label(review) do
+    [
+      "Security review: #{map_get(review, "section")}",
+      "count: #{map_get(review, "count", 0)}",
+      "items: #{format_security_items(map_get(review, "items"))}",
+      map_get(review, "reason")
     ]
     |> compact_join()
   end
@@ -514,6 +551,21 @@ defmodule SelectoMix.DomainDiagram do
   defp format_policy_part(value) when is_binary(value), do: value
   defp format_policy_part(value) when is_atom(value), do: Atom.to_string(value)
   defp format_policy_part(value), do: inspect(value)
+
+  defp format_security_items(items) when is_map(items) do
+    [
+      {"operations", format_list(map_get(items, "operations", []))},
+      {"fields", format_list(map_get(items, "fields", []))},
+      {"transitions", format_list(map_get(items, "transitions", []))},
+      {"validations", map_get(items, "validations_count", 0)},
+      {"constraints", map_get(items, "constraints_count", 0)}
+    ]
+    |> Enum.map(fn {label, value} -> "#{label}: #{value}" end)
+    |> Enum.join("; ")
+  end
+
+  defp format_security_items(items) when is_list(items), do: format_list(items)
+  defp format_security_items(_items), do: "(none)"
 
   defp list_or_empty(value) when is_list(value), do: value
   defp list_or_empty(_value), do: []
