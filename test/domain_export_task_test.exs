@@ -857,6 +857,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert inspection["inspection"]["counts"]["source_fields"] == 2
       assert inspection["inspection"]["counts"]["filters"] == 1
       assert inspection["inspection"]["registries"]["filters"] == ["name"]
+      assert inspection["inspection"]["security_review"] == []
 
       assert inspection["inspection"]["projections"] == [
                "query",
@@ -868,6 +869,77 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert inspection["diagnostics"]["errors"] == []
       assert inspection["diagnostics"]["schema_version"] == 1
+    end)
+  end
+
+  test "generates Studio inspection security review metadata" do
+    in_tmp_dir("selecto_mix_domain_describe_security_review", fn ->
+      Mix.Task.reenable("selecto.domain.describe")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(CapabilityDocsDomain)
+      File.write!("capability.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Describe.run([
+            "capability.normalized.json",
+            "--output",
+            "priv/selecto/capability.inspection.json"
+          ])
+        end)
+
+      assert output =~
+               "Wrote normalized domain inspection JSON: priv/selecto/capability.inspection.json"
+
+      inspection =
+        "priv/selecto/capability.inspection.json"
+        |> File.read!()
+        |> Jason.decode!()
+
+      assert inspection["inspection"]["security_review"] == [
+               %{
+                 "section" => "actions",
+                 "count" => 1,
+                 "items" => ["archive"],
+                 "reason" => "business command definitions and execution surfaces"
+               },
+               %{
+                 "section" => "capabilities",
+                 "count" => 6,
+                 "items" => [
+                   "item.archive",
+                   "item.filter",
+                   "item.member",
+                   "item.name",
+                   "item.rank",
+                   "item.view"
+                 ],
+                 "reason" => "authorization capability catalog"
+               },
+               %{
+                 "section" => "choice_sources",
+                 "count" => 1,
+                 "items" => ["owner_choices"],
+                 "reason" => "cross-domain choices and constraint policy"
+               },
+               %{
+                 "section" => "detail_actions",
+                 "count" => 1,
+                 "items" => ["profile"],
+                 "reason" => "user-visible detail actions"
+               },
+               %{
+                 "section" => "writes",
+                 "count" => 5,
+                 "items" => %{
+                   "operations" => ["update"],
+                   "fields" => ["name"],
+                   "transitions" => ["status"],
+                   "validations_count" => 1,
+                   "constraints_count" => 1
+                 },
+                 "reason" => "write operations, fields, validations, constraints, and transitions"
+               }
+             ]
     end)
   end
 

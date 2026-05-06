@@ -11,6 +11,14 @@ defmodule SelectoMix.DomainInspection do
 
   @format "selecto.domain_inspection"
   @format_version 1
+  @security_sensitive_sections %{
+    "actions" => "business command definitions and execution surfaces",
+    "capabilities" => "authorization capability catalog",
+    "choice_sources" => "cross-domain choices and constraint policy",
+    "detail_actions" => "user-visible detail actions",
+    "source_relationships" => "cross-domain source bindings",
+    "writes" => "write operations, fields, validations, constraints, and transitions"
+  }
 
   @type inspection_error ::
           DomainExport.artifact_error()
@@ -71,6 +79,7 @@ defmodule SelectoMix.DomainInspection do
   defp inspection_artifact(check, inspection, diagnostics) do
     artifact = Map.fetch!(check, :artifact)
     summary = DomainExport.summary(check)
+    inspection = put_security_review(inspection, Map.get(artifact, "domain", %{}))
 
     %{
       "format" => @format,
@@ -86,5 +95,114 @@ defmodule SelectoMix.DomainInspection do
       "inspection" => DomainExport.json_safe(inspection),
       "diagnostics" => DomainExport.json_safe(diagnostics)
     }
+  end
+
+  defp put_security_review(inspection, domain) do
+    case map_get(inspection, "security_review") do
+      nil -> Map.put(inspection, :security_review, security_review(domain))
+      _security_review -> inspection
+    end
+  end
+
+  defp security_review(domain) do
+    [
+      security_registry("actions", domain),
+      security_registry("capabilities", domain),
+      security_registry("choice_sources", domain),
+      security_registry("detail_actions", domain),
+      security_registry("source_relationships", domain),
+      security_writes(map_get(domain, "writes", %{}))
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp security_registry(section, domain) do
+    items =
+      domain
+      |> map_get(section, %{})
+      |> sorted_keys()
+
+    case items do
+      [] ->
+        nil
+
+      items ->
+        %{
+          "section" => section,
+          "count" => length(items),
+          "items" => items,
+          "reason" => Map.fetch!(@security_sensitive_sections, section)
+        }
+    end
+  end
+
+  defp security_writes(writes) when is_map(writes) do
+    items = %{
+      "operations" => writes |> map_get("operations", %{}) |> sorted_keys(),
+      "fields" => writes |> map_get("fields", %{}) |> sorted_keys(),
+      "transitions" => writes |> map_get("transitions", %{}) |> sorted_keys(),
+      "validations_count" => writes |> map_get("validations", []) |> list_count(),
+      "constraints_count" => writes |> map_get("constraints", []) |> list_count()
+    }
+
+    count =
+      length(Map.fetch!(items, "operations")) +
+        length(Map.fetch!(items, "fields")) +
+        length(Map.fetch!(items, "transitions")) +
+        Map.fetch!(items, "validations_count") +
+        Map.fetch!(items, "constraints_count")
+
+    if count > 0 do
+      %{
+        "section" => "writes",
+        "count" => count,
+        "items" => items,
+        "reason" => Map.fetch!(@security_sensitive_sections, "writes")
+      }
+    end
+  end
+
+  defp security_writes(_writes), do: nil
+
+  defp sorted_keys(value) when is_map(value) do
+    value
+    |> Map.keys()
+    |> Enum.map(&to_string/1)
+    |> Enum.sort()
+  end
+
+  defp sorted_keys(_value), do: []
+
+  defp list_count(value) when is_list(value), do: length(value)
+  defp list_count(_value), do: 0
+
+  defp map_get(map, key, default \\ nil)
+
+  defp map_get(map, key, default) when is_map(map) and is_binary(key) do
+    atom_key = existing_atom(key)
+
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      atom_key && Map.has_key?(map, atom_key) -> Map.get(map, atom_key)
+      true -> default
+    end
+  end
+
+  defp map_get(map, key, default) when is_map(map) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      Map.has_key?(map, string_key) -> Map.get(map, string_key)
+      true -> default
+    end
+  end
+
+  defp map_get(_map, _key, default), do: default
+
+  defp existing_atom(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> nil
   end
 end
