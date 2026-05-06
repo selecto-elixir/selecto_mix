@@ -163,6 +163,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       \"\"\"
 
       alias Selecto
+      alias Selecto.Domain.Choices
+      alias Selecto.Domain.Choices.Result
       alias SelectoUpdato
       alias SelectoUpdato.DomainContract
 
@@ -179,6 +181,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       }
 
       def default_config, do: @default_config
+
+      def choice_source_domain(config \\ @default_config), do: contract_domain(config)
 
       def write_contract(config \\\\ @default_config, opts \\\\ []) do
         config
@@ -281,6 +285,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
         errors =
           form_required_errors(form_config, params) ++
+            form_choice_source_errors(form_config, params, config) ++
             Map.get(contract_validation, "errors", [])
 
         field_errors = validation_errors_by(errors, "field")
@@ -709,12 +714,15 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         Map.new(fields, fn field ->
           {Map.get(field, "id"),
            %{
+             label: Map.get(field, "label"),
              type: Map.get(field, "type"),
              insertable: Map.get(field, "insertable"),
              updatable: Map.get(field, "updatable"),
              immutable: Map.get(field, "immutable"),
              write_once: Map.get(field, "write_once"),
              required_on_insert: "insert" in Map.get(field, "required_on", []),
+             choice_source: Map.get(field, "choice_source"),
+             reference: Map.get(field, "reference"),
              validators: Map.get(field, "validators", [])
            }
            |> compact_summary()}
@@ -781,8 +789,14 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       defp template_attributes(operation, fields) when is_map(fields) do
         fields
         |> template_fields(operation)
-        |> Map.new(fn {field, config} ->
-          {field, sample_template_value(Map.get(config, :type))}
+        |> Enum.reduce(%{}, fn {field, config}, acc ->
+          value = sample_template_value(config)
+
+          if blank_choice_source_value?(config, value) do
+            acc
+          else
+            Map.put(acc, field, value)
+          end
         end)
       end
 
@@ -835,6 +849,12 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         Enum.sort_by(fields, fn {field, _config} -> to_string(field) end)
       end
 
+      defp sample_template_value(%{} = config) do
+        if choice_source_field?(config),
+          do: "",
+          else: sample_template_value(Map.get(config, :type))
+      end
+
       defp sample_template_value(type) do
         case type && type |> to_string() |> String.downcase() do
           "integer" -> 0
@@ -853,11 +873,13 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
           %{
             id: to_string(field),
-            label: humanize_field(field),
+            label: Map.get(config, :label, humanize_field(field)),
             type: type,
             input_type: input_type_for(type),
             required: field_required_for_operation?(operation, config),
-            value: sample_template_value(type)
+            choice_source: Map.get(config, :choice_source),
+            reference: Map.get(config, :reference),
+            value: sample_template_value(config)
           }
           |> compact_summary()
         end)
@@ -881,11 +903,15 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp form_attribute_values(fields, values) when is_list(fields) do
-        Map.new(fields, fn field ->
+        Enum.reduce(fields, %{}, fn field, acc ->
           id = map_value(field, :id)
           value = value_for_key(values, id, map_value(field, :value, ""))
 
-          {id, coerce_form_value(value, map_value(field, :type))}
+          if blank_choice_source_value?(field, value) do
+            acc
+          else
+            Map.put(acc, id, coerce_form_value(value, map_value(field, :type)))
+          end
         end)
       end
 
@@ -950,6 +976,105 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           end)
 
         field_errors ++ filter_errors
+      end
+
+      defp form_choice_source_errors(form_config, params, config) do
+        resolver = map_value(config, :choice_source_membership_resolver)
+        domain = map_value(config, :choice_source_domain, contract_domain(config))
+
+        if is_function(resolver, 1) and is_map(domain) do
+          field_values = map_value(params, :fields, %{})
+          request_attrs = choice_source_request_attrs(config, resolver)
+
+          form_config
+          |> map_value(:fields, [])
+          |> Enum.filter(&choice_source_field?/1)
+          |> Enum.flat_map(fn field ->
+            field_id = map_value(field, :id)
+            raw_value = value_for_key(field_values, field_id, nil)
+
+            if blank_form_value?(raw_value) do
+              []
+            else
+              value = coerce_form_value(raw_value, map_value(field, :type))
+              choice_source_validation_error(domain, field_id, value, field, request_attrs)
+            end
+          end)
+        else
+          []
+        end
+      end
+
+      defp choice_source_validation_error(domain, field_id, value, field, request_attrs) do
+        case Choices.validate_choice(domain, field_id, value, request_attrs) do
+          {:ok, %Result{status: :valid}} ->
+            []
+
+          {:error, %Result{} = result} ->
+            [choice_source_error(field_id, field, result)]
+
+          {:error, error} ->
+            [choice_source_error(field_id, field, error)]
+        end
+      end
+
+      defp choice_source_error(field_id, field, %Result{status: :invalid} = result) do
+        %{
+          code: "choice_source_invalid",
+          path: "fields",
+          field: field_id,
+          choice_source: map_value(field, :choice_source),
+          reason: to_string(result.reason_code || :choice_invalid),
+          message: "\#{map_value(field, :label, field_id)} is not an available choice"
+        }
+      end
+
+      defp choice_source_error(field_id, field, %Result{} = result) do
+        %{
+          code: "choice_source_unverified",
+          path: "fields",
+          field: field_id,
+          choice_source: map_value(field, :choice_source),
+          reason: to_string(result.reason_code || :choice_unknown),
+          message: "\#{map_value(field, :label, field_id)} could not be verified"
+        }
+      end
+
+      defp choice_source_error(field_id, field, error) do
+        %{
+          code: "choice_source_validation_error",
+          path: "fields",
+          field: field_id,
+          choice_source: map_value(field, :choice_source),
+          reason: inspect(error),
+          message: "\#{map_value(field, :label, field_id)} could not be verified"
+        }
+      end
+
+      defp choice_source_field?(field) do
+        case map_value(field, :choice_source) do
+          value when is_binary(value) -> String.trim(value) != ""
+          value when is_atom(value) -> not is_nil(value)
+          _value -> false
+        end
+      end
+
+      defp blank_choice_source_value?(field, value) do
+        choice_source_field?(field) and blank_form_value?(value)
+      end
+
+      defp choice_source_request_attrs(config, resolver) do
+        scope = map_value(config, :choice_source_scope, %{})
+
+        [
+          resolver: resolver,
+          actor: map_value(config, :choice_source_actor, map_value(scope, :actor)),
+          tenant: map_value(config, :choice_source_tenant, map_value(scope, :tenant)),
+          record: map_value(config, :choice_source_record, map_value(scope, :record)),
+          context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
+          metadata: map_value(config, :choice_source_metadata, map_value(scope, :metadata, %{}))
+        ]
+        |> Enum.reject(fn {_key, value} -> value in [nil, %{}] end)
       end
 
       defp validation_errors_by(errors, key) do
@@ -1298,6 +1423,9 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     """
     defmodule #{config.web_module}.#{config.name_module}ApiControlPanelLive do
       use #{config.web_module}, :live_view
+      use SelectoComponents.Form.EventHandlers.ChoiceSourceOperations
+
+      import SelectoComponents.Form.FilterRendering, only: [choice_source_filter_input: 1]
 
       alias #{config.app_module}.UpdatoApi.#{config.name_module}Api
 
@@ -1322,6 +1450,11 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
            write_contract_json: encode_contract_for_panel(write_contract),
            write_template_operations: #{config.name_module}Api.write_template_operations(),
            query_json: query_json,
+           choice_source_domain: #{config.name_module}Api.choice_source_domain(),
+           choice_source_context: %{
+             surface: :updato_control_panel,
+             path: "#{config.panel_path}"
+           },
            last_result: nil,
            error: nil
          )
@@ -1340,12 +1473,13 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       def handle_event("write_form_changed", %{"write_form" => params}, socket) do
         operation = Map.get(params, "operation", socket.assigns.write_form_operation)
         request = #{config.name_module}Api.write_request_from_form(operation, params)
-        validation = #{config.name_module}Api.validate_write_form(operation, params)
+        validation = #{config.name_module}Api.validate_write_form(operation, params, write_api_config(socket))
 
         {:noreply,
          assign(socket,
            write_form_operation: operation,
            write_form_values: Map.get(params, "fields", %{}),
+           write_form_display_values: Map.get(params, "field_displays", %{}),
            write_filter_values: Map.get(params, "filters", %{}),
            write_form_validation: validation,
            write_field_errors: Map.get(validation, "field_errors", %{}),
@@ -1521,16 +1655,47 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                   <div :if={@write_form_fields != []}>
                     <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Fields</h3>
                     <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <.input
+                      <div
                         :for={field <- @write_form_fields}
-                        id={"write-form-field-\#{field["id"]}"}
-                        name={"write_form[fields][\#{field["id"]}]"}
-                        label={field["label"]}
-                        type={field["input_type"]}
-                        value={Map.get(@write_form_values, field["id"], field["value"])}
-                        required={field["required"]}
-                        errors={Map.get(@write_field_errors, field["id"], [])}
-                      />
+                        data-write-field-id={field["id"]}
+                        data-choice-source-id={field["choice_source"]}
+                      >
+                        <%= if choice_source_field?(field) do %>
+                          <label
+                            for={"write-form-field-\#{field["id"]}-display"}
+                            class="block text-sm font-semibold leading-6 text-zinc-800"
+                          >
+                            {field["label"]}
+                          </label>
+                          <.choice_source_filter_input
+                            uuid={field["id"]}
+                            input_id={"write-form-field-\#{field["id"]}"}
+                            display_input_id={"write-form-field-\#{field["id"]}-display"}
+                            input_name={"write_form[fields][\#{field["id"]}]"}
+                            display_input_name={"write_form[field_displays][\#{field["id"]}]"}
+                            value={Map.get(@write_form_values, field["id"], field["value"])}
+                            display_value={Map.get(@write_form_display_values, field["id"], "")}
+                            metadata={write_choice_source_metadata(field)}
+                            input_class="mt-2 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                          />
+                          <p
+                            :for={error <- Map.get(@write_field_errors, field["id"], [])}
+                            class="mt-1 text-sm text-rose-600"
+                          >
+                            {error}
+                          </p>
+                        <% else %>
+                          <.input
+                            id={"write-form-field-\#{field["id"]}"}
+                            name={"write_form[fields][\#{field["id"]}]"}
+                            label={field["label"]}
+                            type={field["input_type"]}
+                            value={Map.get(@write_form_values, field["id"], field["value"])}
+                            required={field["required"]}
+                            errors={Map.get(@write_field_errors, field["id"], [])}
+                          />
+                        <% end %>
+                      </div>
                     </div>
                   </div>
                 </form>
@@ -1603,6 +1768,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           write_form_fields: Map.get(form_config, "fields", []),
           write_form_filters: Map.get(form_config, "filters", []),
           write_form_values: form_values(Map.get(form_config, "fields", []), "id"),
+          write_form_display_values: form_display_values(Map.get(form_config, "fields", [])),
           write_filter_values: form_values(Map.get(form_config, "filters", []), "field"),
           write_form_validation: empty_form_validation(),
           write_field_errors: %{},
@@ -1613,9 +1779,52 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         )
       end
 
+      defp write_api_config(socket) do
+        #{config.name_module}Api.default_config()
+        |> Map.merge(%{
+          choice_source_domain: socket.assigns.choice_source_domain,
+          choice_source_membership_resolver: socket.assigns[:choice_source_membership_resolver],
+          choice_source_scope: socket.assigns[:choice_source_scope] || %{}
+        })
+      end
+
+      defp choice_source_field?(%{"choice_source" => choice_source})
+           when is_binary(choice_source) and choice_source != "",
+           do: true
+
+      defp choice_source_field?(_field), do: false
+
+      defp write_choice_source_metadata(field) do
+        %{
+          "id" => Map.get(field, "choice_source"),
+          "field" => Map.get(field, "id"),
+          "transport" => "live",
+          "presentation" => %{"control" => "autocomplete", "mode" => "async"},
+          "label_field" => choice_source_label_field(field),
+          "reference" => Map.get(field, "reference")
+        }
+        |> Enum.reject(fn {_key, value} -> value in [nil, ""] or value == %{} end)
+        |> Map.new()
+      end
+
+      defp choice_source_label_field(%{"reference" => %{"caption_source" => source}})
+           when is_binary(source) do
+        source
+        |> String.split(".")
+        |> List.last()
+      end
+
+      defp choice_source_label_field(_field), do: nil
+
       defp form_values(entries, id_key) do
         Map.new(entries, fn entry ->
           {Map.get(entry, id_key), Map.get(entry, "value", "")}
+        end)
+      end
+
+      defp form_display_values(entries) do
+        Map.new(entries, fn entry ->
+          {Map.get(entry, "id"), ""}
         end)
       end
 

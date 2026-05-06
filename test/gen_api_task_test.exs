@@ -29,6 +29,9 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       control_panel = File.read!("lib/selecto_mix_web/live/orders_api_control_panel_live.ex")
 
       assert api_module =~ "alias SelectoUpdato.DomainContract"
+      assert api_module =~ "alias Selecto.Domain.Choices"
+      assert api_module =~ "alias Selecto.Domain.Choices.Result"
+      assert api_module =~ "def choice_source_domain(config"
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
       assert api_module =~ "def validate_intent(params, config \\\\ @default_config)"
@@ -47,6 +50,13 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
                "def validate_write_form(operation, params, config \\\\ @default_config)"
 
       assert api_module =~ "field_errors: field_errors"
+      assert api_module =~ "form_choice_source_errors(form_config, params, config)"
+      assert api_module =~ "Choices.validate_choice(domain, field_id, value, request_attrs)"
+      assert api_module =~ "choice_source: Map.get(field, \"choice_source\")"
+      assert api_module =~ "choice_source: Map.get(config, :choice_source)"
+      assert api_module =~ "defp sample_template_value(%{} = config)"
+      assert api_module =~ "blank_choice_source_value?(field, value)"
+      assert api_module =~ "value when is_atom(value) -> not is_nil(value)"
       assert api_module =~ "|> DomainContract.json_document(opts)"
 
       assert controller =~ "write_contract: write_contract"
@@ -58,9 +68,22 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert control_panel =~ "assign_write_form(\"insert\")"
       assert control_panel =~ ~s(id="updato-write-form")
       assert control_panel =~ ~s(id="updato-write-validation")
+      assert control_panel =~ "use SelectoComponents.Form.EventHandlers.ChoiceSourceOperations"
+
+      assert control_panel =~
+               "import SelectoComponents.Form.FilterRendering, only: [choice_source_filter_input: 1]"
+
+      assert control_panel =~ "choice_source_domain: OrderApi.choice_source_domain()"
+      assert control_panel =~ "write_api_config(socket)"
+      assert control_panel =~ ~s(data-choice-source-id={field["choice_source"]})
+      assert control_panel =~ ~s(<.choice_source_filter_input)
+      assert control_panel =~ ~s(input_name={"write_form[fields][\#{field["id"]}]"})
       assert control_panel =~ ~s(phx-change="write_form_changed")
       assert control_panel =~ "OrderApi.write_request_from_form(operation, params)"
-      assert control_panel =~ "OrderApi.validate_write_form(operation, params)"
+
+      assert control_panel =~
+               "OrderApi.validate_write_form(operation, params, write_api_config(socket))"
+
       assert control_panel =~ ~s(phx-click="use_write_template")
       assert control_panel =~ ~s(phx-click="validate_request")
 
