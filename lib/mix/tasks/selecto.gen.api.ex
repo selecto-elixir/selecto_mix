@@ -242,6 +242,37 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         |> Jason.encode!(pretty: true)
       end
 
+      def write_form_config(operation \\\\ "insert", config \\\\ @default_config) do
+        operation = normalize_action(operation)
+        summary = write_contract_summary(config)
+
+        %{
+          operation: operation,
+          fields: form_field_entries(operation, summary.fields),
+          filters: form_filter_entries(operation)
+        }
+        |> DomainContract.json_safe()
+      end
+
+      def write_request_from_form(operation, params, config \\\\ @default_config)
+          when is_map(params) do
+        operation = normalize_action(operation)
+        form_config = write_form_config(operation, config)
+        fields = map_value(params, :fields, %{})
+        filters = map_value(params, :filters, %{})
+
+        %{
+          action: operation,
+          filters: form_filter_values(map_value(form_config, :filters, []), filters)
+        }
+        |> maybe_put_template_attributes(
+          operation,
+          form_attribute_values(map_value(form_config, :fields, []), fields)
+        )
+        |> maybe_put_confirm_bulk_delete(operation)
+        |> DomainContract.json_safe()
+      end
+
       def execute(params, config \\\\ @default_config) when is_map(params) do
         with :ok <- validate_write_params(params),
              {:ok, operation} <- build_operation(params, config),
@@ -782,13 +813,140 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp sample_template_value(type) do
-        case type |> to_string() |> String.downcase() do
+        case type && type |> to_string() |> String.downcase() do
           "integer" -> 0
           "float" -> 0.0
           "decimal" -> "0.0"
           "boolean" -> false
           _type -> ""
         end
+      end
+
+      defp form_field_entries(operation, fields) when is_map(fields) do
+        fields
+        |> template_fields(operation)
+        |> Enum.map(fn {field, config} ->
+          type = Map.get(config, :type)
+
+          %{
+            id: to_string(field),
+            label: humanize_field(field),
+            type: type,
+            input_type: input_type_for(type),
+            required: field_required_for_operation?(operation, config),
+            value: sample_template_value(type)
+          }
+          |> compact_summary()
+        end)
+      end
+
+      defp form_field_entries(_operation, _fields), do: []
+
+      defp form_filter_entries(operation) do
+        operation
+        |> default_template_filters()
+        |> Enum.map(fn filter ->
+          field = Map.get(filter, :field)
+
+          %{
+            field: field,
+            label: humanize_field(field),
+            input_type: "text",
+            value: Map.get(filter, :value, "")
+          }
+        end)
+      end
+
+      defp form_attribute_values(fields, values) when is_list(fields) do
+        Map.new(fields, fn field ->
+          id = map_value(field, :id)
+          value = value_for_key(values, id, map_value(field, :value, ""))
+
+          {id, coerce_form_value(value, map_value(field, :type))}
+        end)
+      end
+
+      defp form_attribute_values(_fields, _values), do: %{}
+
+      defp form_filter_values(filters, values) when is_list(filters) do
+        Enum.map(filters, fn filter ->
+          field = map_value(filter, :field)
+
+          %{
+            field: field,
+            value: value_for_key(values, field, map_value(filter, :value, ""))
+          }
+        end)
+      end
+
+      defp form_filter_values(_filters, _values), do: []
+
+      defp value_for_key(values, key, default) when is_map(values) do
+        string_key = to_string(key)
+
+        cond do
+          Map.has_key?(values, key) -> Map.get(values, key)
+          Map.has_key?(values, string_key) -> Map.get(values, string_key)
+          true -> default
+        end
+      end
+
+      defp value_for_key(_values, _key, default), do: default
+
+      defp coerce_form_value(value, type) do
+        case type && type |> to_string() |> String.downcase() do
+          "integer" -> parse_integer(value)
+          "float" -> parse_float(value)
+          "boolean" -> value in [true, "true", "on", "1", 1]
+          _type -> value
+        end
+      end
+
+      defp parse_integer(value) when is_integer(value), do: value
+
+      defp parse_integer(value) when is_binary(value) do
+        case Integer.parse(value) do
+          {integer, ""} -> integer
+          _other -> value
+        end
+      end
+
+      defp parse_integer(value), do: value
+
+      defp parse_float(value) when is_float(value), do: value
+      defp parse_float(value) when is_integer(value), do: value * 1.0
+
+      defp parse_float(value) when is_binary(value) do
+        case Float.parse(value) do
+          {float, ""} -> float
+          _other -> value
+        end
+      end
+
+      defp parse_float(value), do: value
+
+      defp input_type_for(type) do
+        case type && type |> to_string() |> String.downcase() do
+          "integer" -> "number"
+          "float" -> "number"
+          "decimal" -> "number"
+          "boolean" -> "checkbox"
+          _type -> "text"
+        end
+      end
+
+      defp field_required_for_operation?(operation, config)
+           when operation in ["insert", "insert_all", "insert_from_query"] do
+        Map.get(config, :required_on_insert) == true
+      end
+
+      defp field_required_for_operation?(_operation, _config), do: false
+
+      defp humanize_field(field) do
+        field
+        |> to_string()
+        |> String.replace("_", " ")
+        |> String.capitalize()
       end
 
       defp to_existing_atom_safe(value) when is_binary(value) do
@@ -1058,16 +1216,17 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         write_contract = #{config.name_module}Api.write_contract()
 
         {:ok,
-         assign(socket,
+         socket
+         |> assign(
            endpoint_config: #{config.name_module}Api.default_config(),
            write_contract_summary: #{config.name_module}Api.write_contract_summary(),
            write_contract_json: encode_contract_for_panel(write_contract),
            write_template_operations: #{config.name_module}Api.write_template_operations(),
-           request_json: #{config.name_module}Api.write_request_template_json("insert"),
            query_json: query_json,
            last_result: nil,
            error: nil
-         )}
+         )
+         |> assign_write_form("insert")}
       end
 
       @impl true
@@ -1076,9 +1235,19 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       def handle_event("use_write_template", %{"operation" => operation}, socket) do
+        {:noreply, assign_write_form(socket, operation)}
+      end
+
+      def handle_event("write_form_changed", %{"write_form" => params}, socket) do
+        operation = Map.get(params, "operation", socket.assigns.write_form_operation)
+        request = #{config.name_module}Api.write_request_from_form(operation, params)
+
         {:noreply,
          assign(socket,
-           request_json: #{config.name_module}Api.write_request_template_json(operation),
+           write_form_operation: operation,
+           write_form_values: Map.get(params, "fields", %{}),
+           write_filter_values: Map.get(params, "filters", %{}),
+           request_json: Jason.encode!(request, pretty: true),
            error: nil,
            last_result: nil
          )}
@@ -1198,7 +1367,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
               </section>
 
               <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-                <h2 class="text-base font-medium text-slate-900">Write Request JSON</h2>
+                <h2 class="text-base font-medium text-slate-900">Write Composer</h2>
                 <div id="updato-write-templates" class="mt-3 flex flex-wrap gap-2">
                   <button
                     :for={operation <- @write_template_operations}
@@ -1212,6 +1381,40 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                   </button>
                 </div>
 
+                <form id="updato-write-form" class="mt-4 space-y-4" phx-change="write_form_changed">
+                  <input type="hidden" name="write_form[operation]" value={@write_form_operation} />
+
+                  <div :if={@write_form_filters != []}>
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Target</h3>
+                    <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                      <.input
+                        :for={filter <- @write_form_filters}
+                        id={"write-form-filter-\#{filter["field"]}"}
+                        name={"write_form[filters][\#{filter["field"]}]"}
+                        label={filter["label"]}
+                        type={filter["input_type"]}
+                        value={Map.get(@write_filter_values, filter["field"], filter["value"])}
+                      />
+                    </div>
+                  </div>
+
+                  <div :if={@write_form_fields != []}>
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Fields</h3>
+                    <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <.input
+                        :for={field <- @write_form_fields}
+                        id={"write-form-field-\#{field["id"]}"}
+                        name={"write_form[fields][\#{field["id"]}]"}
+                        label={field["label"]}
+                        type={field["input_type"]}
+                        value={Map.get(@write_form_values, field["id"], field["value"])}
+                        required={field["required"]}
+                      />
+                    </div>
+                  </div>
+                </form>
+
+                <h3 class="mt-5 text-sm font-medium text-slate-900">Write Request JSON</h3>
                 <form phx-change="request_changed">
                   <textarea
                     name="request_json"
@@ -1269,6 +1472,27 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           </div>
         </div>
         \"\"\"
+      end
+
+      defp assign_write_form(socket, operation) do
+        form_config = #{config.name_module}Api.write_form_config(operation)
+
+        assign(socket,
+          write_form_operation: form_config["operation"],
+          write_form_fields: Map.get(form_config, "fields", []),
+          write_form_filters: Map.get(form_config, "filters", []),
+          write_form_values: form_values(Map.get(form_config, "fields", []), "id"),
+          write_filter_values: form_values(Map.get(form_config, "filters", []), "field"),
+          request_json: #{config.name_module}Api.write_request_template_json(operation),
+          error: nil,
+          last_result: nil
+        )
+      end
+
+      defp form_values(entries, id_key) do
+        Map.new(entries, fn entry ->
+          {Map.get(entry, id_key), Map.get(entry, "value", "")}
+        end)
       end
 
       defp encode_contract_for_panel({:ok, contract, _diagnostics}) do

@@ -37,6 +37,12 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~
                "def write_request_template(operation \\\\ \"insert\", config \\\\ @default_config)"
 
+      assert api_module =~
+               "def write_form_config(operation \\\\ \"insert\", config \\\\ @default_config)"
+
+      assert api_module =~
+               "def write_request_from_form(operation, params, config \\\\ @default_config)"
+
       assert api_module =~ "|> DomainContract.json_document(opts)"
 
       assert controller =~ "write_contract: write_contract"
@@ -45,7 +51,10 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert control_panel =~ ~s(id="updato-write-contract")
       assert control_panel =~ ~s(id="updato-write-templates")
       assert control_panel =~ "OrderApi.write_contract()"
-      assert control_panel =~ "OrderApi.write_request_template_json(\"insert\")"
+      assert control_panel =~ "assign_write_form(\"insert\")"
+      assert control_panel =~ ~s(id="updato-write-form")
+      assert control_panel =~ ~s(phx-change="write_form_changed")
+      assert control_panel =~ "OrderApi.write_request_from_form(operation, params)"
       assert control_panel =~ ~s(phx-click="use_write_template")
       assert control_panel =~ ~s(phx-click="validate_request")
 
