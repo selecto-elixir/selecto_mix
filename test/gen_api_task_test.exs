@@ -57,6 +57,7 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "choice_source: Map.get(config, :choice_source)"
       assert api_module =~ "defp sample_template_value(%{} = config)"
       assert api_module =~ "blank_choice_source_value?(field, value)"
+      assert api_module =~ "choice_source_filters"
       assert api_module =~ "value when is_atom(value) -> not is_nil(value)"
       assert api_module =~ "|> DomainContract.json_document(opts)"
 

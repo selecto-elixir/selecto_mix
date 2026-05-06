@@ -1156,6 +1156,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           actor: map_value(config, :choice_source_actor, map_value(scope, :actor)),
           tenant: map_value(config, :choice_source_tenant, map_value(scope, :tenant)),
           record: map_value(config, :choice_source_record, map_value(scope, :record)),
+          filters: map_value(config, :choice_source_filters, map_value(scope, :filters, [])),
           context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
           metadata: map_value(config, :choice_source_metadata, map_value(scope, :metadata, %{}))
         ]
