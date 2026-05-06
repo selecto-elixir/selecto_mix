@@ -288,7 +288,12 @@ defmodule SelectoMix.DomainExportTaskTest do
           "item.view" => %{operations: [:select, :detail]}
         },
         choice_sources: %{
-          owner_choices: %{domain: :users, value_field: :id, label_field: :name}
+          owner_choices: %{
+            domain: :users,
+            value_field: :id,
+            label_field: :name,
+            constraint_policy: %{domain_of_interest: :fail_closed}
+          }
         }
       })
     end
@@ -737,6 +742,8 @@ defmodule SelectoMix.DomainExportTaskTest do
       docs = File.read!("docs/selecto/capability.md")
 
       assert docs =~ "# Capability Items"
+      assert docs =~ "## Choice Source Details"
+      assert docs =~ "| owner_choices | users | id | name | domain_of_interest=fail_closed |"
       assert docs =~ "## Capability Usage"
       assert docs =~ "| Capability | Role | Section | Target | Path |"
       assert docs =~ "| item.name | field | source | name | source.columns.name.capability |"
@@ -840,6 +847,7 @@ defmodule SelectoMix.DomainExportTaskTest do
               "source_relationship" => "customer",
               "value_field" => "id",
               "label_field" => "name",
+              "constraint_policy" => %{"domain_of_interest" => "fail_closed"},
               "filters_count" => 1,
               "order_by_count" => 1,
               "presentation" => %{"control" => "select"}
@@ -892,6 +900,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert diagram =~ "Source relationship: customer"
       assert diagram =~ "customer_id -> id"
       assert diagram =~ "Choice source: customer_choices"
+      assert diagram =~ "policy: domain_of_interest=fail_closed"
       assert diagram =~ "picker: select"
       assert diagram =~ "Picker field: customer_id"
       assert diagram =~ "choice_customer_choices -. uses .-> rel_customer"

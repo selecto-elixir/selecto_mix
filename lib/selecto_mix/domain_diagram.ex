@@ -318,10 +318,21 @@ defmodule SelectoMix.DomainDiagram do
       map_get(choice_source, "domain") && "domain: #{map_get(choice_source, "domain")}",
       map_get(choice_source, "value_field") && "value: #{map_get(choice_source, "value_field")}",
       map_get(choice_source, "label_field") && "label: #{map_get(choice_source, "label_field")}",
+      choice_source_policy_label(choice_source),
       picker_label(choice_source),
       choice_source_counts(choice_source)
     ]
     |> compact_join()
+  end
+
+  defp choice_source_policy_label(choice_source) do
+    choice_source
+    |> map_get("constraint_policy", %{})
+    |> format_constraint_policy()
+    |> case do
+      "" -> nil
+      policy -> "policy: #{policy}"
+    end
   end
 
   defp picker_label(choice_source) do
@@ -488,6 +499,21 @@ defmodule SelectoMix.DomainDiagram do
     |> Enum.map(&to_string/1)
     |> Enum.join(", ")
   end
+
+  defp format_constraint_policy(policy) when is_map(policy) do
+    policy
+    |> Enum.map(fn {key, value} ->
+      "#{format_policy_part(key)}=#{format_policy_part(value)}"
+    end)
+    |> Enum.sort()
+    |> Enum.join(", ")
+  end
+
+  defp format_constraint_policy(_policy), do: ""
+
+  defp format_policy_part(value) when is_binary(value), do: value
+  defp format_policy_part(value) when is_atom(value), do: Atom.to_string(value)
+  defp format_policy_part(value), do: inspect(value)
 
   defp list_or_empty(value) when is_list(value), do: value
   defp list_or_empty(_value), do: []

@@ -73,6 +73,7 @@ defmodule SelectoMix.DomainDocs do
       source_section(domain),
       schemas_section(domain),
       registries_section(domain),
+      choice_source_details_section(domain),
       query_members_section(domain),
       capability_usage_section(domain),
       diagnostics_section(summary)
@@ -222,6 +223,31 @@ defmodule SelectoMix.DomainDocs do
         ])
       end) ++
       [""]
+  end
+
+  defp choice_source_details_section(domain) do
+    choice_sources = map_get(domain, "choice_sources", %{})
+
+    if is_map(choice_sources) and map_size(choice_sources) > 0 do
+      [
+        "## Choice Source Details",
+        "",
+        "| Choice Source | Domain | Value | Label | Constraint Policy |",
+        "| --- | --- | --- | --- | --- |"
+      ] ++
+        Enum.map(sorted_entries(choice_sources), fn {id, choice_source} ->
+          table_row([
+            id,
+            map_get(choice_source, "domain"),
+            map_get(choice_source, "value_field"),
+            map_get(choice_source, "label_field"),
+            format_constraint_policy(map_get(choice_source, "constraint_policy", %{}))
+          ])
+        end) ++
+        [""]
+    else
+      []
+    end
   end
 
   defp query_members_section(domain) do
@@ -527,6 +553,21 @@ defmodule SelectoMix.DomainDocs do
   end
 
   defp format_path(path), do: to_string(path)
+
+  defp format_constraint_policy(policy) when is_map(policy) do
+    policy
+    |> Enum.map(fn {key, value} ->
+      "#{format_policy_part(key)}=#{format_policy_part(value)}"
+    end)
+    |> Enum.sort()
+    |> Enum.join(", ")
+  end
+
+  defp format_constraint_policy(_policy), do: ""
+
+  defp format_policy_part(value) when is_binary(value), do: value
+  defp format_policy_part(value) when is_atom(value), do: Atom.to_string(value)
+  defp format_policy_part(value), do: inspect(value)
 
   defp format_key(key) do
     key
