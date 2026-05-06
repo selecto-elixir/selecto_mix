@@ -388,6 +388,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "write enabled: false"
       assert output =~ "reconstructable sections: filters, functions, joins, schemas, source"
       assert output =~ "partial sections: published_views"
+      assert output =~ "security review sections: (none)"
       assert output =~ "source preview:"
       assert output =~ "Source preview validation:"
       assert output =~ "syntax: ok"
@@ -432,6 +433,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["preview"]["target_file"] == "tmp/imported/preview/target_domain.ex"
       assert plan["preview"]["domain_function"] == "domain/0"
       assert plan["preview"]["partial_sections"] == ["published_views"]
+      assert plan["preview"]["security_sensitive_sections"] == []
       assert plan["source_preview"]["language"] == "elixir"
       assert plan["source_preview"]["target_module"] == "Preview.TargetDomain"
       assert plan["source_preview"]["includes_runtime_placeholders"] == true
@@ -470,6 +472,64 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert source_output =~ "Selecto domain import preview."
       assert source_output =~ ~s("name" => "Demo Items")
       assert source_output =~ ~s("$selecto_export" => "function")
+    end)
+  end
+
+  test "flags security-sensitive sections in normalized domain import previews" do
+    in_tmp_dir("selecto_mix_domain_import_security_review", fn ->
+      Mix.Task.reenable("selecto.domain.import")
+      assert {:ok, artifact} = SelectoMix.DomainExport.export(CapabilityDocsDomain)
+      File.write!("capability.normalized.json", SelectoMix.DomainExport.encode!(artifact))
+
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Selecto.Domain.Import.run(["capability.normalized.json", "--check"])
+        end)
+
+      assert output =~
+               "security review sections: actions (reconstructable), capabilities (reconstructable), choice_sources (reconstructable), detail_actions (reconstructable), writes (reconstructable)"
+
+      json_output =
+        capture_io(fn ->
+          Mix.Task.reenable("selecto.domain.import")
+
+          Mix.Tasks.Selecto.Domain.Import.run([
+            "capability.normalized.json",
+            "--check",
+            "--format",
+            "json"
+          ])
+        end)
+
+      plan = Jason.decode!(json_output)
+
+      assert plan["preview"]["security_sensitive_sections"] == [
+               %{
+                 "name" => "actions",
+                 "status" => "reconstructable",
+                 "reason" => "business command definitions and execution surfaces"
+               },
+               %{
+                 "name" => "capabilities",
+                 "status" => "reconstructable",
+                 "reason" => "authorization capability catalog"
+               },
+               %{
+                 "name" => "choice_sources",
+                 "status" => "reconstructable",
+                 "reason" => "cross-domain choices and constraint policy"
+               },
+               %{
+                 "name" => "detail_actions",
+                 "status" => "reconstructable",
+                 "reason" => "user-visible detail actions"
+               },
+               %{
+                 "name" => "writes",
+                 "status" => "reconstructable",
+                 "reason" => "write operations, fields, validations, constraints, and transitions"
+               }
+             ]
     end)
   end
 

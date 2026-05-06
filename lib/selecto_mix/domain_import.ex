@@ -36,6 +36,15 @@ defmodule SelectoMix.DomainImport do
     "choice_sources"
   ]
 
+  @security_sensitive_sections %{
+    "actions" => "business command definitions and execution surfaces",
+    "capabilities" => "authorization capability catalog",
+    "choice_sources" => "cross-domain choices and constraint policy",
+    "detail_actions" => "user-visible detail actions",
+    "source_relationships" => "cross-domain source bindings",
+    "writes" => "write operations, fields, validations, constraints, and transitions"
+  }
+
   @spec plan_file(Path.t(), keyword()) :: {:ok, map()} | {:error, DomainExport.artifact_error()}
   def plan_file(path, opts \\ []) do
     with {:ok, check} <- DomainExport.check_file(path, opts) do
@@ -157,8 +166,27 @@ defmodule SelectoMix.DomainImport do
       "blocked_by_runtime_placeholders" => blocked?,
       "reconstructable_sections" => sections_by_status(sections, "reconstructable"),
       "partial_sections" => sections_by_status(sections, "partial_runtime_placeholders"),
-      "preserved_unmodeled_sections" => sections_by_status(sections, "preserved_unmodeled")
+      "preserved_unmodeled_sections" => sections_by_status(sections, "preserved_unmodeled"),
+      "security_sensitive_sections" => security_sensitive_sections(sections)
     }
+  end
+
+  defp security_sensitive_sections(sections) do
+    sections
+    |> Enum.filter(fn section ->
+      Map.get(section, "present") and
+        Map.has_key?(@security_sensitive_sections, Map.get(section, "name"))
+    end)
+    |> Enum.map(fn section ->
+      name = Map.fetch!(section, "name")
+
+      %{
+        "name" => name,
+        "status" => Map.fetch!(section, "status"),
+        "reason" => Map.fetch!(@security_sensitive_sections, name)
+      }
+    end)
+    |> Enum.sort_by(&Map.fetch!(&1, "name"))
   end
 
   defp source_preview(domain, preview, runtime_placeholders) do

@@ -177,6 +177,10 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     )
 
     Mix.shell().info(
+      "  security review sections: #{format_security_sections(Map.get(preview, "security_sensitive_sections", []))}"
+    )
+
+    Mix.shell().info(
       "  source preview: #{Map.get(source_preview, "line_count")} lines (use --source to print)"
     )
   end
@@ -262,6 +266,16 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
 
   defp format_list([]), do: "(none)"
   defp format_list(values), do: Enum.join(values, ", ")
+
+  defp format_security_sections([]), do: "(none)"
+
+  defp format_security_sections(sections) do
+    sections
+    |> Enum.map(fn section ->
+      "#{Map.fetch!(section, "name")} (#{Map.fetch!(section, "status")})"
+    end)
+    |> Enum.join(", ")
+  end
 
   defp format_invalid_options(invalid) do
     invalid
