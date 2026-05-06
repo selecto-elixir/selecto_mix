@@ -100,6 +100,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert config_index < show_index
       assert output =~ "For choice-backed write fields"
       assert output =~ "socket/session state, not browser parameters"
+      assert output =~ "constraint_policy: %{domain_of_interest: :fail_closed}"
+      assert output =~ "reject unenforced trusted filters"
     end)
   end
 

@@ -31,7 +31,11 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
   `:choice_source_membership_resolver`, and `:choice_source_scope` from the
   generated LiveView using socket/session data rather than browser parameters.
   For HTTP writes, customize the generated controller's `api_config/1` hook with
-  the same server-owned resolver and scope.
+  the same server-owned resolver and scope. For security-sensitive
+  Domain-of-Interest filters, declare
+  `constraint_policy: %{domain_of_interest: :fail_closed}` on the choice source
+  in the domain overlay and have the resolver return a closed result when a
+  trusted filter cannot be enforced.
   """
 
   use Mix.Task
@@ -2008,7 +2012,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       2. Start your server and open #{config.panel_path}.
       3. For choice-backed write fields, assign choice-source options and membership resolvers in the generated LiveView.
          Derive actor, tenant, and required filters from socket/session state, not browser parameters.
-      4. If the generated controller accepts choice-backed writes, customize api_config/1 with the same server-owned membership resolver and secure scope.
+      4. For security-sensitive choice filters, add constraint_policy: %{domain_of_interest: :fail_closed} in the domain overlay and make resolvers reject unenforced trusted filters.
+      5. If the generated controller accepts choice-backed writes, customize api_config/1 with the same server-owned membership resolver and secure scope.
     """)
   end
 end

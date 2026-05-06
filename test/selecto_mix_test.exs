@@ -733,6 +733,8 @@ defmodule SelectoMixTest do
       assert result =~ "# defcolumn :price do"
       assert result =~ "# deffilter \"active\" do"
       assert result =~ "# deffunction \"similarity\" do"
+      assert result =~ "# defchoice_source(:related_choices, %{"
+      assert result =~ "#   constraint_policy: %{domain_of_interest: :fail_closed}"
       assert result =~ "# defwrite_operation :insert do"
       assert result =~ "# defwrite_field :name do"
       assert result =~ "# defcapability \"entity.write\" do"

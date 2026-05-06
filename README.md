@@ -100,6 +100,21 @@ Keep actor, tenant, and required domain filters server-owned. Browser payloads
 may provide search text or a selected id, but they should not be trusted for
 tenant or authorization scope.
 
+For choice sources whose Domain-of-Interest filters are security-sensitive,
+declare a fail-closed policy in the domain overlay:
+
+```elixir
+defchoice_source(:product_assignees, %{
+  domain: :employees,
+  value_field: :id,
+  label_field: :full_name,
+  constraint_policy: %{domain_of_interest: :fail_closed}
+})
+```
+
+Resolvers should return a closed option/membership result when that policy is
+present and any trusted filter cannot be enforced.
+
 ## Core Workflow
 
 Recommended workflow:
