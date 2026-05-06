@@ -273,6 +273,29 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         |> DomainContract.json_safe()
       end
 
+      def validate_write_form(operation, params, config \\\\ @default_config) when is_map(params) do
+        operation = normalize_action(operation)
+        form_config = write_form_config(operation, config)
+        request = write_request_from_form(operation, params, config)
+        {:ok, contract_validation} = validate_intent(request, config)
+
+        errors =
+          form_required_errors(form_config, params) ++
+            Map.get(contract_validation, "errors", [])
+
+        field_errors = validation_errors_by(errors, "field")
+        filter_errors = validation_errors_by(errors, "filter")
+
+        %{
+          valid: errors == [],
+          errors: errors,
+          warnings: Map.get(contract_validation, "warnings", []),
+          field_errors: field_errors,
+          filter_errors: filter_errors
+        }
+        |> DomainContract.json_safe()
+      end
+
       def execute(params, config \\\\ @default_config) when is_map(params) do
         with :ok <- validate_write_params(params),
              {:ok, operation} <- build_operation(params, config),
@@ -881,6 +904,82 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       defp form_filter_values(_filters, _values), do: []
 
+      defp form_required_errors(form_config, params) do
+        field_values = map_value(params, :fields, %{})
+        filter_values = map_value(params, :filters, %{})
+
+        field_errors =
+          form_config
+          |> map_value(:fields, [])
+          |> Enum.filter(&(map_value(&1, :required) == true))
+          |> Enum.flat_map(fn field ->
+            field_id = map_value(field, :id)
+
+            if blank_form_value?(value_for_key(field_values, field_id, nil)) do
+              [
+                %{
+                  code: "required_field_blank",
+                  path: "fields",
+                  field: field_id,
+                  message: "\#{map_value(field, :label, field_id)} is required"
+                }
+              ]
+            else
+              []
+            end
+          end)
+
+        filter_errors =
+          form_config
+          |> map_value(:filters, [])
+          |> Enum.flat_map(fn filter ->
+            field = map_value(filter, :field)
+
+            if blank_form_value?(value_for_key(filter_values, field, nil)) do
+              [
+                %{
+                  code: "required_filter_blank",
+                  path: "filters",
+                  filter: field,
+                  message: "\#{map_value(filter, :label, field)} is required"
+                }
+              ]
+            else
+              []
+            end
+          end)
+
+        field_errors ++ filter_errors
+      end
+
+      defp validation_errors_by(errors, key) do
+        errors
+        |> Enum.reduce(%{}, fn error, acc ->
+          case error_value(error, key) do
+            nil ->
+              acc
+
+            id ->
+              Map.update(acc, to_string(id), [error_value(error, "message", "invalid")], fn messages ->
+                [error_value(error, "message", "invalid") | messages]
+              end)
+          end
+        end)
+        |> Map.new(fn {id, messages} -> {id, Enum.reverse(messages)} end)
+      end
+
+      defp error_value(error, key, default \\\\ nil)
+
+      defp error_value(error, "field", default), do: map_value(error, :field, Map.get(error, "field", default))
+      defp error_value(error, "filter", default), do: map_value(error, :filter, Map.get(error, "filter", default))
+      defp error_value(error, "message", default), do: map_value(error, :message, Map.get(error, "message", default))
+      defp error_value(error, key, default) when is_map(error), do: Map.get(error, key, default)
+
+      defp blank_form_value?(nil), do: true
+      defp blank_form_value?(""), do: true
+      defp blank_form_value?(value) when is_binary(value), do: String.trim(value) == ""
+      defp blank_form_value?(_value), do: false
+
       defp value_for_key(values, key, default) when is_map(values) do
         string_key = to_string(key)
 
@@ -1241,12 +1340,16 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       def handle_event("write_form_changed", %{"write_form" => params}, socket) do
         operation = Map.get(params, "operation", socket.assigns.write_form_operation)
         request = #{config.name_module}Api.write_request_from_form(operation, params)
+        validation = #{config.name_module}Api.validate_write_form(operation, params)
 
         {:noreply,
          assign(socket,
            write_form_operation: operation,
            write_form_values: Map.get(params, "fields", %{}),
            write_filter_values: Map.get(params, "filters", %{}),
+           write_form_validation: validation,
+           write_field_errors: Map.get(validation, "field_errors", %{}),
+           write_filter_errors: Map.get(validation, "filter_errors", %{}),
            request_json: Jason.encode!(request, pretty: true),
            error: nil,
            last_result: nil
@@ -1381,6 +1484,22 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                   </button>
                 </div>
 
+                <div
+                  id="updato-write-validation"
+                  data-validation-status={validation_status(@write_form_validation)}
+                  class={[
+                    "mt-4 rounded-xl border px-3 py-2 text-sm",
+                    validation_status(@write_form_validation) == "valid" &&
+                      "border-emerald-200 bg-emerald-50 text-emerald-700",
+                    validation_status(@write_form_validation) == "invalid" &&
+                      "border-rose-200 bg-rose-50 text-rose-700",
+                    validation_status(@write_form_validation) == "pending" &&
+                      "border-slate-200 bg-slate-50 text-slate-600"
+                  ]}
+                >
+                  {validation_message(@write_form_validation)}
+                </div>
+
                 <form id="updato-write-form" class="mt-4 space-y-4" phx-change="write_form_changed">
                   <input type="hidden" name="write_form[operation]" value={@write_form_operation} />
 
@@ -1394,6 +1513,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                         label={filter["label"]}
                         type={filter["input_type"]}
                         value={Map.get(@write_filter_values, filter["field"], filter["value"])}
+                        errors={Map.get(@write_filter_errors, filter["field"], [])}
                       />
                     </div>
                   </div>
@@ -1409,6 +1529,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
                         type={field["input_type"]}
                         value={Map.get(@write_form_values, field["id"], field["value"])}
                         required={field["required"]}
+                        errors={Map.get(@write_field_errors, field["id"], [])}
                       />
                     </div>
                   </div>
@@ -1483,6 +1604,9 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           write_form_filters: Map.get(form_config, "filters", []),
           write_form_values: form_values(Map.get(form_config, "fields", []), "id"),
           write_filter_values: form_values(Map.get(form_config, "filters", []), "field"),
+          write_form_validation: empty_form_validation(),
+          write_field_errors: %{},
+          write_filter_errors: %{},
           request_json: #{config.name_module}Api.write_request_template_json(operation),
           error: nil,
           last_result: nil
@@ -1494,6 +1618,26 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           {Map.get(entry, id_key), Map.get(entry, "value", "")}
         end)
       end
+
+      defp empty_form_validation do
+        %{"valid" => nil, "errors" => [], "warnings" => [], "field_errors" => %{}, "filter_errors" => %{}}
+      end
+
+      defp validation_status(%{"valid" => true}), do: "valid"
+      defp validation_status(%{"valid" => false}), do: "invalid"
+      defp validation_status(_validation), do: "pending"
+
+      defp validation_message(%{"valid" => true}), do: "Composer payload matches the write contract."
+
+      defp validation_message(%{"valid" => false, "errors" => errors}) do
+        count = length(errors)
+        "Composer payload has \#{count} contract \#{error_word(count)}."
+      end
+
+      defp validation_message(_validation), do: "Edit the generated inputs to check the payload."
+
+      defp error_word(1), do: "issue"
+      defp error_word(_count), do: "issues"
 
       defp encode_contract_for_panel({:ok, contract, _diagnostics}) do
         Jason.encode!(contract, pretty: true)
