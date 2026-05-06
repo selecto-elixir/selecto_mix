@@ -51,6 +51,7 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
 
       assert api_module =~ "field_errors: field_errors"
       assert api_module =~ "form_choice_source_errors(form_config, params, config)"
+      assert api_module =~ "validate_choice_source_params(params, config)"
       assert api_module =~ "Choices.validate_choice(domain, field_id, value, request_attrs)"
       assert api_module =~ "choice_source: Map.get(field, \"choice_source\")"
       assert api_module =~ "choice_source: Map.get(config, :choice_source)"
@@ -61,6 +62,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
 
       assert controller =~ "write_contract: write_contract"
       assert controller =~ "capabilities: OrderApi.write_contract_summary()"
+      assert controller =~ "OrderApi.execute(params, api_config(conn))"
+      assert controller =~ "defp api_config(_conn)"
 
       assert control_panel =~ ~s(id="updato-write-contract")
       assert control_panel =~ ~s(id="updato-write-templates")
@@ -84,6 +87,7 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert control_panel =~
                "OrderApi.validate_write_form(operation, params, write_api_config(socket))"
 
+      assert control_panel =~ "OrderApi.execute(payload, write_api_config(socket))"
       assert control_panel =~ ~s(phx-click="use_write_template")
       assert control_panel =~ ~s(phx-click="validate_request")
 

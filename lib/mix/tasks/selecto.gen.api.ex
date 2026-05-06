@@ -30,6 +30,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
   resolvers server-owned. Assign `:choice_source_options_resolver`,
   `:choice_source_membership_resolver`, and `:choice_source_scope` from the
   generated LiveView using socket/session data rather than browser parameters.
+  For HTTP writes, customize the generated controller's `api_config/1` hook with
+  the same server-owned resolver and scope.
   """
 
   use Mix.Task
@@ -309,6 +311,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def execute(params, config \\\\ @default_config) when is_map(params) do
         with :ok <- validate_write_params(params),
+             :ok <- validate_choice_source_params(params, config),
              {:ok, operation} <- build_operation(params, config),
              {:ok, result} <- SelectoUpdato.execute(operation, config.repo) do
           {:ok, %{result: result, action: Map.get(params, "action", "insert")}}
@@ -1011,23 +1014,99 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         end
       end
 
+      defp validate_choice_source_params(params, config) do
+        case choice_source_param_errors(params, config) do
+          [] -> :ok
+          [error | _errors] -> {:error, {:validation_error, map_value(error, :message, "invalid choice")}}
+        end
+      end
+
+      defp choice_source_param_errors(params, config) do
+        resolver = map_value(config, :choice_source_membership_resolver)
+        domain = map_value(config, :choice_source_domain, contract_domain(config))
+
+        if is_function(resolver, 1) and is_map(domain) do
+          field_configs = choice_source_field_configs(config)
+          request_attrs = choice_source_request_attrs(config, resolver)
+
+          params
+          |> choice_source_value_sets()
+          |> Enum.flat_map(fn {path, values} ->
+            choice_source_value_errors(domain, field_configs, request_attrs, path, values)
+          end)
+        else
+          []
+        end
+      end
+
+      defp choice_source_field_configs(config) do
+        config
+        |> write_contract_summary()
+        |> Map.get(:fields, %{})
+        |> Enum.filter(fn {_field_id, field} -> choice_source_field?(field) end)
+        |> Map.new()
+      end
+
+      defp choice_source_value_sets(params) do
+        attribute_sets =
+          case Map.get(params, "attributes", %{}) do
+            attributes when is_map(attributes) -> [{["attributes"], attributes}]
+            _attributes -> []
+          end
+
+        record_sets =
+          params
+          |> Map.get("records", [])
+          |> Enum.with_index()
+          |> Enum.flat_map(fn
+            {record, index} when is_map(record) -> [{["records", index], record}]
+            _entry -> []
+          end)
+
+        attribute_sets ++ record_sets
+      end
+
+      defp choice_source_value_errors(domain, field_configs, request_attrs, path, values) do
+        values
+        |> Enum.flat_map(fn {field_id, raw_value} ->
+          field_id = to_string(field_id)
+
+          case Map.get(field_configs, field_id) do
+            nil ->
+              []
+
+            field ->
+              if blank_form_value?(raw_value) do
+                []
+              else
+                value = coerce_form_value(raw_value, map_value(field, :type))
+                choice_source_validation_error(domain, field_id, value, field, request_attrs, path)
+              end
+          end
+        end)
+      end
+
       defp choice_source_validation_error(domain, field_id, value, field, request_attrs) do
+        choice_source_validation_error(domain, field_id, value, field, request_attrs, ["fields"])
+      end
+
+      defp choice_source_validation_error(domain, field_id, value, field, request_attrs, path) do
         case Choices.validate_choice(domain, field_id, value, request_attrs) do
           {:ok, %Result{status: :valid}} ->
             []
 
           {:error, %Result{} = result} ->
-            [choice_source_error(field_id, field, result)]
+            [choice_source_error(field_id, field, result, path)]
 
           {:error, error} ->
-            [choice_source_error(field_id, field, error)]
+            [choice_source_error(field_id, field, error, path)]
         end
       end
 
-      defp choice_source_error(field_id, field, %Result{status: :invalid} = result) do
+      defp choice_source_error(field_id, field, %Result{status: :invalid} = result, path) do
         %{
           code: "choice_source_invalid",
-          path: "fields",
+          path: path,
           field: field_id,
           choice_source: map_value(field, :choice_source),
           reason: to_string(result.reason_code || :choice_invalid),
@@ -1035,10 +1114,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         }
       end
 
-      defp choice_source_error(field_id, field, %Result{} = result) do
+      defp choice_source_error(field_id, field, %Result{} = result, path) do
         %{
           code: "choice_source_unverified",
-          path: "fields",
+          path: path,
           field: field_id,
           choice_source: map_value(field, :choice_source),
           reason: to_string(result.reason_code || :choice_unknown),
@@ -1046,10 +1125,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         }
       end
 
-      defp choice_source_error(field_id, field, error) do
+      defp choice_source_error(field_id, field, error, path) do
         %{
           code: "choice_source_validation_error",
-          path: "fields",
+          path: path,
           field: field_id,
           choice_source: map_value(field, :choice_source),
           reason: inspect(error),
@@ -1214,7 +1293,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def create(conn, params) do
         with :ok <- authorize_api_request(conn, :create),
-             {:ok, payload} <- #{config.name_module}Api.execute(params) do
+             {:ok, payload} <- #{config.name_module}Api.execute(params, api_config(conn)) do
           json(conn, success_envelope(conn, payload))
         else
           {:error, reason} ->
@@ -1280,6 +1359,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp authorize_api_request(_conn, _action), do: :ok
+
+      defp api_config(_conn) do
+        #{config.name_module}Api.default_config()
+      end
 
       defp reject_large_payload(conn, _opts) do
         max_bytes = Application.get_env(:#{config.app}, :selecto_api_max_request_bytes, 200_000)
@@ -1502,7 +1585,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def handle_event("send_request", _params, socket) do
         with {:ok, payload} <- Jason.decode(socket.assigns.request_json),
-             {:ok, result} <- #{config.name_module}Api.execute(payload) do
+             {:ok, result} <- #{config.name_module}Api.execute(payload, write_api_config(socket)) do
           {:noreply, assign(socket, last_result: Jason.encode!(result, pretty: true), error: nil)}
         else
           {:error, reason} ->
@@ -1924,6 +2007,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       2. Start your server and open #{config.panel_path}.
       3. For choice-backed write fields, assign choice-source options and membership resolvers in the generated LiveView.
          Derive actor, tenant, and required filters from socket/session state, not browser parameters.
+      4. If the generated controller accepts choice-backed writes, customize api_config/1 with the same server-owned membership resolver and secure scope.
     """)
   end
 end
