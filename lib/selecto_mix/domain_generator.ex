@@ -317,6 +317,7 @@ defmodule SelectoMix.DomainGenerator do
     # Format the map with nice indentation
     formatted_columns =
       all_columns
+      |> sorted_pairs()
       |> Enum.map(fn {field, type_map} ->
         "          #{inspect(field)} => #{inspect(type_map)}"
       end)
@@ -388,6 +389,7 @@ defmodule SelectoMix.DomainGenerator do
         # Format with nice indentation and helpful comments
         formatted_columns =
           columns_map
+          |> sorted_pairs()
           |> Enum.map(fn {field, config_map} ->
             comment =
               if field == display_field_atom do
@@ -417,6 +419,7 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_assocs =
         associations
+        |> sorted_pairs()
         |> Enum.map(fn {assoc_name, assoc_config} ->
           format_association_config(assoc_name, assoc_config)
         end)
@@ -520,6 +523,7 @@ defmodule SelectoMix.DomainGenerator do
     # Include through associations - selecto now handles them
     schema_configs =
       associations
+      |> sorted_pairs()
       |> Enum.map(fn {assoc_name, assoc_config} ->
         related_schema = association_related_schema(assoc_config)
         schema_name = association_schema_key(assoc_name, assoc_config)
@@ -629,7 +633,9 @@ defmodule SelectoMix.DomainGenerator do
     schema_name_lower = String.downcase(schema_name_str)
 
     # Try multiple matching strategies
-    Enum.find_value(expand_modes, fn {key, value} ->
+    expand_modes
+    |> sorted_pairs()
+    |> Enum.find_value(fn {key, value} ->
       key_lower = String.downcase(key)
 
       cond do
@@ -887,6 +893,7 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_assocs =
         associations
+        |> sorted_pairs()
         |> Enum.map(fn {assoc_name, assoc_config} ->
           # Ensure all values are properly inspected for valid Elixir syntax
           queryable_name = assoc_config[:queryable] |> inspect()
@@ -954,6 +961,7 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_filters =
         filters
+        |> sorted_pairs()
         |> Enum.map(fn {filter_name, filter_config} ->
           formatted_config = format_filter_config(filter_config)
 
@@ -1002,6 +1010,7 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_joins =
         all_joins
+        |> sorted_pairs()
         |> Enum.map(fn {join_name, join_config} ->
           format_single_join(join_name, join_config)
         end)
@@ -1114,6 +1123,7 @@ defmodule SelectoMix.DomainGenerator do
 
     filter_queries =
       filters
+      |> sorted_pairs()
       # Limit to avoid too many generated functions
       |> Enum.take(2)
       |> Enum.map(fn {filter_name, _filter_config} ->
@@ -1207,15 +1217,6 @@ defmodule SelectoMix.DomainGenerator do
     is_parameterized = Map.has_key?(join_config, :parameters)
     is_many_to_many = Map.has_key?(join_config, :join_through)
     is_through = Map.get(join_config, :is_through, false)
-
-    _join_marker =
-      cond do
-        is_non_assoc -> " # NON-ASSOCIATION JOIN"
-        is_parameterized -> " # PARAMETERIZED JOIN"
-        is_many_to_many -> " # MANY-TO-MANY"
-        is_through -> " # THROUGH ASSOCIATION"
-        true -> ""
-      end
 
     join_type = inspect(Map.get(join_config, :type, :left))
     join_name_str = Map.get(join_config, :name, humanize_name(join_name))
@@ -1342,8 +1343,7 @@ defmodule SelectoMix.DomainGenerator do
         |> Enum.map(fn param ->
           param_config =
             param
-            |> Map.take([:name, :type, :required, :default, :description])
-            |> Map.to_list()
+            |> ordered_take([:name, :type, :required, :default, :description])
             |> Enum.map(fn {key, value} -> "#{key}: #{inspect(value)}" end)
             |> Enum.join(", ")
 
@@ -1363,13 +1363,14 @@ defmodule SelectoMix.DomainGenerator do
     else
       formatted_fields =
         fields
+        |> sorted_pairs()
         |> Enum.map(fn {field_name, field_config} ->
           config_str =
             case field_config do
               %{} ->
                 config_pairs =
                   field_config
-                  |> Map.to_list()
+                  |> sorted_pairs()
                   |> Enum.map(fn {key, value} -> "#{key}: #{inspect(value)}" end)
                   |> Enum.join(", ")
 
@@ -1388,6 +1389,17 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   defp format_join_fields_config(_), do: "%{}"
+
+  defp sorted_pairs(map_or_keyword) do
+    map_or_keyword
+    |> Enum.sort_by(fn {key, _value} -> {to_string(key), inspect(key)} end)
+  end
+
+  defp ordered_take(map, keys) when is_map(map) do
+    keys
+    |> Enum.filter(&Map.has_key?(map, &1))
+    |> Enum.map(&{&1, Map.fetch!(map, &1)})
+  end
 
   defp humanize_name(atom) when is_atom(atom) do
     atom
