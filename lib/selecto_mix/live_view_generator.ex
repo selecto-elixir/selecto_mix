@@ -61,8 +61,8 @@ defmodule SelectoMix.LiveViewGenerator do
 
       1. Import hooks in `assets/js/app.js`:
          ```javascript
-         import {hooks as selectoHooks} from "phoenix-colocated/selecto_components"
-         // Add to your liveSocket hooks: { ...selectoHooks }
+         import {hooks as selectoComponentsHooks} from "phoenix-colocated/selecto_components"
+         // Add to your liveSocket hooks: { ...selectoComponentsHooks }
          ```
 
       2. Add to Tailwind in `assets/css/app.css`:
