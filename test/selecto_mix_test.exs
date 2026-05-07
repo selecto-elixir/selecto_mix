@@ -217,7 +217,7 @@ defmodule SelectoMixTest do
     @primary_key {:public_id, :binary_id, autogenerate: false}
 
     schema "uuid_records" do
-      field(:legacy_uuid, Ecto.UUID)
+      field(:external_uuid, Ecto.UUID)
       field(:name, :string)
     end
   end
@@ -226,7 +226,6 @@ defmodule SelectoMixTest do
 
   alias SelectoMix.{
     AdapterResolver,
-    ConfigMerger,
     ConnectionOpts,
     DomainGenerator,
     LiveViewGenerator,
@@ -276,78 +275,7 @@ defmodule SelectoMixTest do
 
       assert config.primary_key == :public_id
       assert config.field_types.public_id == :binary_id
-      assert config.field_types.legacy_uuid == :uuid
-    end
-  end
-
-  describe "ConfigMerger" do
-    test "merge_with_existing/2 with nil existing content" do
-      new_config = %{schema_module: TestSchema, fields: [:id, :name]}
-      result = ConfigMerger.merge_with_existing(new_config, nil)
-
-      assert result == new_config
-    end
-
-    test "merge_with_existing/2 with existing content" do
-      new_config = %{schema_module: TestSchema, fields: [:id, :name, :email]}
-
-      existing_content = """
-      defmodule TestDomain do
-        def domain do
-          %{
-            source: %{
-              fields: [:id, :name] # CUSTOM: added custom field
-            }
-          }
-        end
-      end
-      """
-
-      result = ConfigMerger.merge_with_existing(new_config, existing_content)
-
-      # Should preserve customizations
-      assert Map.has_key?(result, :preserve_existing)
-    end
-
-    test "detect_customizations/1 finds custom markers" do
-      content_with_custom = "field: :test # CUSTOM"
-      content_without_custom = "field: :test"
-
-      # Test through parse_existing_config since detect_customizations is private
-      result1 = ConfigMerger.parse_existing_config(content_with_custom)
-      result2 = ConfigMerger.parse_existing_config(content_without_custom)
-
-      assert result1[:has_customizations] == true
-      assert result2[:has_customizations] == false
-    end
-
-    test "parse_existing_config/1 preserves base-domain function registries" do
-      existing_content = """
-      defmodule TestDomain do
-        def base_domain do
-          %{
-            name: "Test",
-            functions: %{
-              "similarity" => %{
-                kind: :scalar,
-                sql_name: "public.similarity",
-                args: [
-                  %{name: :left, type: :string, source: :selector},
-                  %{name: :right, type: :string, source: :value}
-                ],
-                returns: :float,
-                allowed_in: [:select, :order_by]
-              }
-            }
-          }
-        end
-      end
-      """
-
-      parsed = ConfigMerger.parse_existing_config(existing_content)
-
-      assert parsed[:custom_functions] =~ "similarity"
-      assert parsed[:custom_functions] =~ "public.similarity"
+      assert config.field_types.external_uuid == :uuid
     end
   end
 
@@ -437,8 +365,8 @@ defmodule SelectoMixTest do
         schema_module: UuidSchema,
         table_name: "uuid_records",
         primary_key: :public_id,
-        fields: [:public_id, :legacy_uuid, :name],
-        field_types: %{public_id: :binary_id, legacy_uuid: :uuid, name: :string},
+        fields: [:public_id, :external_uuid, :name],
+        field_types: %{public_id: :binary_id, external_uuid: :uuid, name: :string},
         associations: %{},
         suggested_defaults: %{
           default_selected: [:name],
@@ -452,10 +380,10 @@ defmodule SelectoMixTest do
 
       assert String.contains?(result, "primary_key: :public_id")
       assert String.contains?(result, ":public_id => %{type: :binary_id}")
-      assert String.contains?(result, ":legacy_uuid => %{type: :uuid}")
+      assert String.contains?(result, ":external_uuid => %{type: :uuid}")
     end
 
-    test "generate_domain_map/1 preserves custom function registries on regeneration" do
+    test "generate_domain_map/1 ignores pre-0.5 in-file custom marker payloads" do
       config = %{
         schema_module: TestSchema,
         table_name: "tests",
@@ -469,7 +397,8 @@ defmodule SelectoMixTest do
           default_order: []
         },
         metadata: %{module_name: "Test"},
-        preserved_customizations: %{
+        functions: %{"rank" => %{kind: :scalar, sql_name: "rank"}},
+        stale_in_file_customizations: %{
           custom_functions:
             "%{\n        \"similarity\" => %{kind: :scalar, sql_name: \"public.similarity\"}\n      }"
         }
@@ -478,8 +407,8 @@ defmodule SelectoMixTest do
       result = DomainGenerator.generate_domain_map(config)
 
       assert String.contains?(result, "functions: %{")
-      assert String.contains?(result, "public.similarity")
-      assert String.contains?(result, "# CUSTOM")
+      assert String.contains?(result, "rank")
+      refute String.contains?(result, "public.similarity")
     end
 
     test "generate_domain_map/1 emits many-to-many join table metadata" do
@@ -946,12 +875,8 @@ defmodule SelectoMixTest do
         }
       }
 
-      # Step 1: Merge with existing (none in this case)
-      merged_config = ConfigMerger.merge_with_existing(config, nil)
-      assert merged_config == config
-
-      # Step 2: Generate domain file
-      domain_content = DomainGenerator.generate_domain_file(TestSchema, merged_config)
+      # Generate domain file
+      domain_content = DomainGenerator.generate_domain_file(TestSchema, config)
       assert is_binary(domain_content)
       assert String.contains?(domain_content, "defmodule")
 

@@ -4,8 +4,8 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   Generate Selecto domain configuration from Ecto schemas or database relations with Igniter support.
 
   This task automatically discovers Ecto schemas in your project and generates
-  corresponding Selecto domain configurations. It preserves user customizations
-  when re-run and supports incremental updates when database schemas change.
+  corresponding Selecto domain configurations. Generated base files are
+  regenerated intentionally; app-specific customizations belong in overlays.
 
   ## Examples
 
@@ -21,7 +21,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       # Generate with specific output directory
       mix selecto.gen.domain Blog.Post --output lib/blog/selecto_domains
 
-      # Force regenerate (overwrites customizations)
+      # Force regenerate the generated base file
       mix selecto.gen.domain Blog.Post --force
 
       # Expand associated schemas with full columns/associations
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
      * `--all` - Generate domains for all discovered Ecto schemas
      * `--output` - Specify output directory (default: lib/APP_NAME/selecto_domains)
-     * `--force` - Overwrite existing domain files without merging customizations
+     * `--force` - Overwrite existing generated domain files
      * `--dry-run` - Show what would be generated without creating files
      * `--include-associations` - Include associations as joins (default: true)
      * `--exclude` - Comma-separated list of schemas to exclude
@@ -77,16 +77,11 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   - SavedView schema and context modules (if not already present)
   - Saved views integration in the LiveView
 
-  ## Customization Preservation
+  ## Customization
 
-  When re-running the task, user customizations are preserved by:
-  - Detecting custom fields, filters, and joins
-  - Merging new schema fields with existing customizations
-  - Preserving custom domain metadata and configuration
-  - Backing up original files before major changes
-
-  The generated files include special markers that help identify
-  generated vs. customized sections.
+  Generated domain files are treated as generated code. Put app-specific
+  customizations in the generated overlay module so schema refreshes can
+  replace the base domain intentionally.
   """
 
   use Igniter.Mix.Task
@@ -717,7 +712,6 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   defp generate_domain_file(igniter, source, file_path, opts) do
-    existing_content = read_existing_domain_file(igniter, file_path)
     # Convert map opts to keyword list for SchemaIntrospector
     opts_list = Map.to_list(opts)
     domain_config = SelectoMix.SchemaIntrospector.introspect_schema(source, opts_list)
@@ -758,14 +752,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
         config_with_modes
       end
 
-    merged_config =
-      if opts[:force] do
-        config_with_poly
-      else
-        SelectoMix.ConfigMerger.merge_with_existing(config_with_poly, existing_content)
-      end
-
-    merged_config = Map.put(merged_config, :adapter, domain_config[:adapter])
+    generated_config = Map.put(config_with_poly, :adapter, domain_config[:adapter])
 
     # Add schema_module to opts for saved views context inference
     app_name = Igniter.Project.Application.app_name(igniter) |> to_string() |> Macro.camelize()
@@ -776,15 +763,22 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       |> Map.put(:app_name, app_name)
 
     content =
-      SelectoMix.DomainGenerator.generate_domain_file(source, merged_config, opts_with_schema)
+      SelectoMix.DomainGenerator.generate_domain_file(source, generated_config, opts_with_schema)
 
-    # For now, delete the existing file and create a new one
-    # This is a workaround until we figure out the proper Igniter API
-    if opts[:force] && File.exists?(file_path) do
-      File.rm!(file_path)
+    cond do
+      File.exists?(file_path) && !opts[:force] ->
+        Igniter.add_warning(
+          igniter,
+          "Domain file already exists at #{file_path}; not overwriting. Move customizations to the overlay and rerun with --force to regenerate the base domain."
+        )
+
+      true ->
+        if opts[:force] && File.exists?(file_path) do
+          File.rm!(file_path)
+        end
+
+        Igniter.create_new_file(igniter, file_path, content)
     end
-
-    Igniter.create_new_file(igniter, file_path, content)
   end
 
   # defp generate_queries_file(igniter, schema, file_path, opts) do
@@ -862,14 +856,6 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
         |> Igniter.create_new_file(file_path, content)
         |> add_success_message("Generated Studio artifacts provider at #{file_path}")
         |> add_studio_artifacts_guidance(source, opts)
-    end
-  end
-
-  defp read_existing_domain_file(_igniter, file_path) do
-    case File.read(file_path) do
-      {:ok, content} -> content
-      {:error, :enoent} -> nil
-      {:error, _reason} -> nil
     end
   end
 

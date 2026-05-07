@@ -4,7 +4,7 @@ defmodule SelectoMix.DomainGenerator do
 
   This module creates complete, functional Selecto domain files that users
   can immediately use in their applications. The generated files include
-  helpful comments, customization markers, and suggested configurations.
+  helpful comments, overlay hooks, and suggested configurations.
   """
 
   @doc """
@@ -14,7 +14,7 @@ defmodule SelectoMix.DomainGenerator do
   - Schema-based field and type definitions
   - Association configurations for joins
   - Suggested default selections and filters
-  - Customization markers for user modifications
+  - Overlay hooks for user modifications
   - Documentation and usage examples
   """
   def generate_domain_file(schema_module, config, opts \\ []) do
@@ -48,18 +48,12 @@ defmodule SelectoMix.DomainGenerator do
       - Define write contracts, actions, and capabilities
       - Add domain-specific validations (future)
 
-      Your overlay customizations are preserved when you regenerate this file.
+      Overlay customizations are preserved when you regenerate this file.
 
       ## Usage
 
       #{usage_examples}
 
-      ## Legacy Customization (Deprecated)
-
-      Fields, filters, and joins marked with "# CUSTOM" comments will still be
-      preserved when this file is regenerated, but we recommend using the
-      overlay file instead for a cleaner separation of generated vs. custom code.
-      
       ## Parameterized Joins
       
       This domain supports parameterized joins that accept runtime parameters:
@@ -93,7 +87,7 @@ defmodule SelectoMix.DomainGenerator do
           
       Additional options:
       
-          # Force regenerate (overwrites customizations)
+          # Force regenerate the generated base file
           #{regeneration_command} --force
           
           # Preview changes without writing files
@@ -111,7 +105,8 @@ defmodule SelectoMix.DomainGenerator do
           # Expand specific associated schemas with full columns/associations
           #{regeneration_command} --expand-schemas categories,tags
           
-      Your customizations will be preserved during regeneration (unless --force is used).
+      Keep app-specific customizations in the overlay module so regeneration can
+      replace this generated base file intentionally.
       \"\"\"
     #{saved_views_use}
       @doc \"\"\"
@@ -162,7 +157,6 @@ defmodule SelectoMix.DomainGenerator do
   """
   def generate_domain_map(config) do
     timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-    custom_metadata = generate_custom_metadata(config)
     generated_from = generated_from_label(config)
 
     "%{\n      # Generated from: #{generated_from}\n" <>
@@ -190,7 +184,7 @@ defmodule SelectoMix.DomainGenerator do
       "      # Retarget table configuration (Selecto 0.3.0+)\n" <>
       "      retarget: #{generate_retarget_config(config)},\n      \n" <>
       "      # Join configurations\n" <>
-      "      joins: #{generate_joins_config(config)}#{custom_metadata}\n    }"
+      "      joins: #{generate_joins_config(config)}\n    }"
   end
 
   # Private generation functions
@@ -937,55 +931,33 @@ defmodule SelectoMix.DomainGenerator do
   defp guess_table_name(_), do: "unknown_table"
 
   defp generate_domain_name(config) do
-    custom_name = get_in(config, [:preserved_customizations, :custom_metadata, :custom_name])
-
-    case custom_name do
-      nil ->
-        base_name = config[:metadata][:module_name] || "Unknown"
-        inspect("#{base_name} Domain")
-
-      name ->
-        inspect(name) <> " # CUSTOM"
-    end
+    base_name = config[:metadata][:module_name] || "Unknown"
+    inspect("#{base_name} Domain")
   end
 
   defp generate_default_selected(config) do
-    suggested_defaults = config[:suggested_defaults][:default_selected] || []
-
-    custom_defaults =
-      get_in(config, [:preserved_customizations, :custom_metadata, :custom_defaults])
-
-    defaults =
-      case custom_defaults do
-        nil -> suggested_defaults
-        custom -> custom ++ suggested_defaults
-      end
+    defaults = config[:suggested_defaults][:default_selected] || []
 
     formatted_defaults = defaults |> Enum.map(&inspect(to_string(&1))) |> Enum.join(", ")
 
     case defaults do
       [] -> "[]"
       _ -> "[#{formatted_defaults}]"
-    end <> if(custom_defaults, do: " # CUSTOM", else: "")
+    end
   end
 
   defp generate_filters_config(config) do
-    suggested_filters = config[:suggested_defaults][:default_filters] || %{}
-    custom_filters = get_in(config, [:preserved_customizations, :custom_filters]) || %{}
+    filters = config[:suggested_defaults][:default_filters] || %{}
 
-    all_filters = Map.merge(suggested_filters, custom_filters)
-
-    if Enum.empty?(all_filters) do
+    if Enum.empty?(filters) do
       "%{}"
     else
       formatted_filters =
-        all_filters
+        filters
         |> Enum.map(fn {filter_name, filter_config} ->
-          is_custom = Map.has_key?(custom_filters, filter_name)
-          custom_marker = if is_custom, do: " # CUSTOM", else: ""
           formatted_config = format_filter_config(filter_config)
 
-          "\"#{filter_name}\" => #{formatted_config}#{custom_marker}"
+          "\"#{filter_name}\" => #{formatted_config}"
         end)
         |> Enum.join(",\n      ")
 
@@ -994,18 +966,12 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   defp generate_functions_config(config) do
-    preserved_functions = get_in(config, [:preserved_customizations, :custom_functions])
     functions = config[:functions] || %{}
 
-    cond do
-      is_binary(preserved_functions) and String.trim(preserved_functions) != "" ->
-        preserved_functions <> " # CUSTOM"
-
-      is_map(functions) and map_size(functions) > 0 ->
-        inspect(functions, pretty: true, width: 60)
-
-      true ->
-        "%{}"
+    if is_map(functions) and map_size(functions) > 0 do
+      inspect(functions, pretty: true, width: 60)
+    else
+      "%{}"
     end
   end
 
@@ -1079,16 +1045,6 @@ defmodule SelectoMix.DomainGenerator do
 
   defp generate_retarget_config(_config) do
     "%{}"
-  end
-
-  defp generate_custom_metadata(config) do
-    custom_metadata = get_in(config, [:preserved_customizations, :custom_metadata]) || %{}
-
-    if Enum.empty?(custom_metadata) do
-      ""
-    else
-      "\n      \n      # Custom domain metadata\n      # Add any additional domain configuration here"
-    end
   end
 
   defp generate_helper_functions(schema_module, config) do
@@ -1247,19 +1203,14 @@ defmodule SelectoMix.DomainGenerator do
   end
 
   defp format_single_join(join_name, join_config) do
-    is_custom = Map.get(join_config, :is_custom, false)
     is_non_assoc = Map.get(join_config, :non_assoc, false)
     is_parameterized = Map.has_key?(join_config, :parameters)
     is_many_to_many = Map.has_key?(join_config, :join_through)
     is_through = Map.get(join_config, :is_through, false)
 
-    # Note: Custom markers are disabled for now due to Sourceror parsing issues with inline comments
-    # TODO: Re-enable once we find a parser-safe format
-    _custom_marker =
+    _join_marker =
       cond do
         is_non_assoc -> " # NON-ASSOCIATION JOIN"
-        is_custom and is_parameterized -> " # CUSTOM PARAMETERIZED JOIN"
-        is_custom -> " # CUSTOM JOIN"
         is_parameterized -> " # PARAMETERIZED JOIN"
         is_many_to_many -> " # MANY-TO-MANY"
         is_through -> " # THROUGH ASSOCIATION"

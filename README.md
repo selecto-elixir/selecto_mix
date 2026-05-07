@@ -7,7 +7,7 @@
 Use it when you want to:
 
 - generate domains from Ecto schemas
-- generate overlays and preserve customizations across refreshes
+- generate overlays for app-specific customizations
 - scaffold saved views, exported views, and filter sets
 - install Selecto-related dependencies and front-end integration
 - validate parameterized joins
@@ -250,7 +250,7 @@ Recommended UDF pattern:
 Current `0.4.x` scope:
 
 - domain generation is usable but not stable
-- customization preservation is a core goal and supported path
+- overlay-based customization is the supported path
 - parameterized join validation exists and is still expanding
 - runtime query helper generation is intentionally not part of the current scope
 

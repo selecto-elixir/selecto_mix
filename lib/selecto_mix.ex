@@ -3,14 +3,14 @@ defmodule SelectoMix do
   Mix tasks and tooling for automatic Selecto configuration generation.
 
   SelectoMix provides utilities to automatically generate Selecto domain
-  configurations from Ecto schemas, preserve user customizations across
-  regenerations, and scaffold related SelectoComponents persistence helpers.
+  configurations from Ecto schemas, create overlay modules for app-specific
+  customizations, and scaffold related SelectoComponents persistence helpers.
 
   ## Key Features
 
   - **Automatic Schema Discovery**: Finds and introspects all Ecto schemas in your project
   - **Intelligent Configuration Generation**: Creates comprehensive Selecto domains with suggested defaults
-  - **Customization Preservation**: Maintains user modifications when regenerating files
+  - **Overlay Customization**: Keeps app-specific modifications outside generated base files
   - **Igniter Integration**: Uses modern Elixir project modification tools
   - **Persistence Scaffolds**: Generates saved views, saved view configs,
     exported views, and filter set persistence modules
@@ -49,8 +49,8 @@ defmodule SelectoMix do
   1. Add SelectoMix to your project dependencies
   2. Run `mix selecto.install` to setup basic structure
   3. Generate domains with `mix selecto.gen.domain --all`
-  4. Customize the generated domains as needed
-  5. Re-run `mix selecto.gen.domain` after schema changes - customizations will be preserved
+  4. Put app-specific changes in the generated overlay modules
+  5. Re-run `mix selecto.gen.domain --force` after schema changes to refresh generated base files
 
   ## Configuration
 
@@ -58,8 +58,7 @@ defmodule SelectoMix do
 
       config :selecto_mix,
         output_dir: "lib/my_app/selecto_domains",
-        default_associations: true,
-        preserve_customizations: true
+        default_associations: true
 
   ## Example Usage
 
@@ -72,7 +71,7 @@ defmodule SelectoMix do
       # Generate for all schemas with associations
       mix selecto.gen.domain --all --include-associations
       
-      # Force regeneration (overwrites customizations)
+      # Force regeneration of the generated base file
       mix selecto.gen.domain Blog.Post --force
   """
 
