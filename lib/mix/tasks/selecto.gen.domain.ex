@@ -45,6 +45,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
      * `--include-associations` - Include associations as joins (default: true)
      * `--exclude` - Comma-separated list of schemas to exclude
      * `--live` - Generate LiveView files for the domain
+     * `--studio-artifacts` - Generate a host-app Studio inspection provider module
      * `--saved-views` - Generate saved views implementation (requires --live)
      * `--expand-schemas` - Comma-separated list of associated schemas to fully expand with columns and associations
     * `--expand-tag` - Many-to-many tag mode: TableName:display_field (uses IDs, prevents denormalization)
@@ -68,6 +69,10 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   - `live/SCHEMA_NAME_live.ex` - LiveView module
   - `live/SCHEMA_NAME_live.html.heex` - LiveView template
 
+  With `--studio-artifacts` flag, additionally generates:
+  - `schemas/SCHEMA_NAME_domain_artifacts.ex` - trusted inspection provider
+    module for `SelectoStudio.DomainArtifacts` host-app registration
+
   With `--saved-views` flag, additionally generates:
   - SavedView schema and context modules (if not already present)
   - Saved views integration in the LiveView
@@ -86,7 +91,13 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   use Igniter.Mix.Task
 
-  alias SelectoMix.{AdapterResolver, Connection, ConnectionOpts, LiveViewGenerator}
+  alias SelectoMix.{
+    AdapterResolver,
+    Connection,
+    ConnectionOpts,
+    LiveViewGenerator,
+    StudioArtifactsGenerator
+  }
 
   @impl Igniter.Mix.Task
   def info(_argv, _composing_task) do
@@ -104,6 +115,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
           include_associations: :boolean,
           exclude: :string,
           live: :boolean,
+          studio_artifacts: :boolean,
           saved_views: :boolean,
           expand_schemas: :string,
           expand_tag: :keep,
@@ -593,6 +605,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     Include associations: #{opts[:include_associations]}
     Force overwrite: #{opts[:force] || false}
     Generate LiveView: #{opts[:live] || false}
+    Generate Studio artifacts provider: #{opts[:studio_artifacts] || false}
     Generate Saved Views: #{opts[:saved_views] || false}
 
     Sources to process:
@@ -614,6 +627,10 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
         IO.puts("    → #{live_file}")
         IO.puts("    → #{html_file}")
       end
+
+      if opts[:studio_artifacts] do
+        IO.puts("    → #{studio_artifacts_file_path(output_dir, schema)}")
+      end
     end)
 
     if opts[:saved_views] do
@@ -631,6 +648,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       |> ensure_directory_exists(output_dir)
       |> generate_domain_file(source, domain_file, opts)
       |> generate_overlay_file(source, domain_file, opts)
+      |> maybe_generate_studio_artifacts_file(source, output_dir, opts)
       |> add_success_message("Generated Selecto domain for #{display_source(source)}")
       |> add_artifact_guidance(source, opts)
 
@@ -670,8 +688,21 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     |> Macro.underscore()
   end
 
+  defp source_display_name(source) do
+    source
+    |> LiveViewGenerator.source_live_name()
+    |> Macro.underscore()
+    |> String.replace("_", " ")
+    |> String.split()
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
+
   defp domain_file_path(output_dir, source) do
     Path.join([output_dir, "#{source_basename(source)}_domain.ex"])
+  end
+
+  defp studio_artifacts_file_path(output_dir, source) do
+    Path.join([output_dir, "#{source_basename(source)}_domain_artifacts.ex"])
   end
 
   defp ensure_directory_exists(igniter, dir_path) do
@@ -800,6 +831,38 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
       |> ensure_directory_exists(overlay_dir)
       |> Igniter.create_new_file(overlay_path, content)
       |> add_success_message("Generated overlay template at #{overlay_path}")
+    end
+  end
+
+  defp maybe_generate_studio_artifacts_file(igniter, _source, _output_dir, opts)
+       when not is_map_key(opts, :studio_artifacts),
+       do: igniter
+
+  defp maybe_generate_studio_artifacts_file(igniter, _source, _output_dir, %{
+         studio_artifacts: false
+       }),
+       do: igniter
+
+  defp maybe_generate_studio_artifacts_file(igniter, source, output_dir, opts) do
+    file_path = studio_artifacts_file_path(output_dir, source)
+
+    cond do
+      File.exists?(file_path) and not opts[:force] ->
+        igniter
+        |> add_success_message("Studio artifacts provider already exists at #{file_path}")
+        |> add_studio_artifacts_guidance(source, opts)
+
+      true ->
+        if opts[:force] and File.exists?(file_path), do: File.rm!(file_path)
+
+        domain_module = domain_module_for_source(igniter, source, opts)
+        content = StudioArtifactsGenerator.provider_module(domain_module)
+
+        igniter
+        |> ensure_directory_exists(output_dir)
+        |> Igniter.create_new_file(file_path, content)
+        |> add_success_message("Generated Studio artifacts provider at #{file_path}")
+        |> add_studio_artifacts_guidance(source, opts)
     end
   end
 
@@ -1111,6 +1174,20 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     Igniter.add_notice(
       igniter,
       artifact_guidance(domain_module, artifact_path, docs_path, inspection_path, diagram_path)
+    )
+  end
+
+  defp add_studio_artifacts_guidance(igniter, source, opts) do
+    domain_module = domain_module_for_source(igniter, source, opts)
+    artifact_module = StudioArtifactsGenerator.artifact_module_name(domain_module)
+
+    Igniter.add_notice(
+      igniter,
+      StudioArtifactsGenerator.integration_guidance(
+        domain_id: source_basename(source),
+        domain_name: source_display_name(source),
+        artifact_module: artifact_module
+      )
     )
   end
 

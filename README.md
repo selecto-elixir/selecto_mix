@@ -16,6 +16,7 @@ Use it when you want to:
 - generate Studio/tooling inspection JSON from normalized artifacts
 - generate Mermaid diagrams from domain inspection artifacts
 - generate Markdown docs from normalized domain JSON artifacts
+- generate host-app Studio artifact providers for trusted preloaded inspection
 
 ## Installation
 
@@ -63,6 +64,16 @@ Generate a domain plus LiveView wiring:
 ```bash
 mix selecto.gen.domain MyApp.Catalog.Product --live
 ```
+
+Generate a trusted provider module for Studio's host-app artifact registry:
+
+```bash
+mix selecto.gen.domain MyApp.Catalog.Product --studio-artifacts
+```
+
+The generated provider uses core `Selecto.Domain` inspection APIs. Register it
+with `config :selecto_studio, :domain_artifacts` in the host app when you want
+`SelectoStudioWeb.DomainInspectionController` to preload that domain.
 
 The generated router notice includes the LiveView route plus optional
 `SelectoComponents.QueryContract.Plug`,

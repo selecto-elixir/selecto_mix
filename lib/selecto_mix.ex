@@ -24,6 +24,8 @@ defmodule SelectoMix do
     artifacts
   - **Domain Docs**: Generates Markdown references from normalized domain
     artifacts
+  - **Studio Host Artifacts**: Can generate trusted host-app inspection
+    providers for `SelectoStudio.DomainArtifacts`
 
   ## Main Mix Tasks
 

@@ -231,7 +231,8 @@ defmodule SelectoMixTest do
     DomainGenerator,
     LiveViewGenerator,
     OverlayGenerator,
-    SchemaIntrospector
+    SchemaIntrospector,
+    StudioArtifactsGenerator
   }
 
   describe "SelectoMix basic functionality" do
@@ -738,6 +739,41 @@ defmodule SelectoMixTest do
       assert result =~ "# defwrite_operation :insert do"
       assert result =~ "# defwrite_field :name do"
       assert result =~ "# defcapability \"entity.write\" do"
+    end
+  end
+
+  describe "StudioArtifactsGenerator" do
+    test "renders a core Selecto inspection provider module" do
+      result =
+        StudioArtifactsGenerator.provider_module("Shop.SelectoDomains.ProductDomain")
+
+      assert result =~ "defmodule Shop.SelectoDomains.ProductDomainArtifacts"
+      assert result =~ "@domain_module Shop.SelectoDomains.ProductDomain"
+      assert result =~ "Selecto.Domain.normalize(@domain_module.domain())"
+      assert result =~ "Selecto.Domain.describe(normalized)"
+      assert result =~ ~s("format" => "selecto.domain_inspection")
+      refute result =~ "SelectoStudio.DomainInspection"
+      refute result =~ "SelectoStudioWeb."
+    end
+
+    test "renders Studio registry and router guidance for host apps" do
+      result =
+        StudioArtifactsGenerator.integration_guidance(
+          domain_id: "product",
+          domain_name: "Product",
+          artifact_module: "Shop.SelectoDomains.ProductDomainArtifacts"
+        )
+
+      assert result =~ "config :selecto_studio, :domain_artifacts"
+      assert result =~ ~s(default: "product")
+      assert result =~ ~s(id: "product")
+
+      assert result =~
+               "inspection: {Shop.SelectoDomains.ProductDomainArtifacts, :inspection_artifact, []}"
+
+      assert result =~ ~s(get "/studio/domain-inspection")
+      assert result =~ ~s(get "/studio/domain-inspection/:domain_id")
+      assert result =~ ~s(post "/studio/domain-inspection")
     end
   end
 
