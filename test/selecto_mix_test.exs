@@ -743,6 +743,71 @@ defmodule SelectoMixTest do
   end
 
   describe "StudioArtifactsGenerator" do
+    test "gen.domain --studio-artifacts creates a provider module that compiles" do
+      suffix = System.unique_integer([:positive])
+      schema_module = Module.concat([__MODULE__, "GeneratedStudioProduct#{suffix}"])
+
+      Code.compile_string("""
+      defmodule #{inspect(schema_module)} do
+        use Ecto.Schema
+
+        schema "generated_studio_products_#{suffix}" do
+          field :name, :string
+          field :active, :boolean
+        end
+      end
+      """)
+
+      source_basename =
+        schema_module
+        |> Module.split()
+        |> List.last()
+        |> Macro.underscore()
+
+      output_dir = "lib/shop/selecto_domains"
+      provider_path = Path.join(output_dir, "#{source_basename}_domain_artifacts.ex")
+      domain_path = Path.join(output_dir, "#{source_basename}_domain.ex")
+
+      Mix.Task.reenable("selecto.gen.domain")
+
+      igniter =
+        Igniter.Test.test_project(app_name: :shop)
+        |> Igniter.compose_task("selecto.gen.domain", [
+          inspect(schema_module),
+          "--output",
+          output_dir,
+          "--studio-artifacts"
+        ])
+
+      assert igniter.issues == []
+      Igniter.Test.assert_creates(igniter, domain_path)
+      Igniter.Test.assert_creates(igniter, provider_path)
+
+      provider_source =
+        igniter.rewrite
+        |> Rewrite.source!(provider_path)
+        |> Rewrite.Source.get(:content)
+
+      expected_module =
+        Module.concat([
+          "Shop.SelectoDomains.GeneratedStudioProduct#{suffix}DomainArtifacts"
+        ])
+
+      {compiled, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.compile_string(provider_source)
+        end)
+
+      assert provider_source =~ "Selecto.Domain.normalize(@domain_module.domain())"
+      assert provider_source =~ "Selecto.Domain.describe(normalized)"
+      assert Keyword.has_key?(compiled, expected_module)
+
+      Igniter.Test.assert_has_notice(igniter, fn notice ->
+        notice =~ "config :selecto_studio, :domain_artifacts" and
+          notice =~ "SelectoStudioWeb.DomainInspectionController"
+      end)
+    end
+
     test "renders a core Selecto inspection provider module" do
       result =
         StudioArtifactsGenerator.provider_module("Shop.SelectoDomains.ProductDomain")
@@ -752,6 +817,7 @@ defmodule SelectoMixTest do
       assert result =~ "Selecto.Domain.normalize(@domain_module.domain())"
       assert result =~ "Selecto.Domain.describe(normalized)"
       assert result =~ ~s("format" => "selecto.domain_inspection")
+      assert result =~ "Map.from_struct()"
       refute result =~ "SelectoStudio.DomainInspection"
       refute result =~ "SelectoStudioWeb."
     end

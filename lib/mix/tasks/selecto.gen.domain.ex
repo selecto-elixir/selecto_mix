@@ -853,13 +853,12 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
         |> add_studio_artifacts_guidance(source, opts)
 
       true ->
-        if opts[:force] and File.exists?(file_path), do: File.rm!(file_path)
+        if opts[:force] && File.exists?(file_path), do: File.rm!(file_path)
 
         domain_module = domain_module_for_source(igniter, source, opts)
         content = StudioArtifactsGenerator.provider_module(domain_module)
 
         igniter
-        |> ensure_directory_exists(output_dir)
         |> Igniter.create_new_file(file_path, content)
         |> add_success_message("Generated Studio artifacts provider at #{file_path}")
         |> add_studio_artifacts_guidance(source, opts)
