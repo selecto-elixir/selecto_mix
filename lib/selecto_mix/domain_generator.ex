@@ -156,11 +156,9 @@ defmodule SelectoMix.DomainGenerator do
   Generate the core domain configuration map.
   """
   def generate_domain_map(config) do
-    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
     generated_from = generated_from_label(config)
 
     "%{\n      # Generated from: #{generated_from}\n" <>
-      "      # Last updated: #{timestamp}\n      \n" <>
       "      # Canonical Selecto domain schema version\n" <>
       "      schema_version: 1,\n      \n" <>
       "      source: #{generate_source_config(config)},\n" <>
