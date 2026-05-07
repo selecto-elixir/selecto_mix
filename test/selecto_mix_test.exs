@@ -788,6 +788,13 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "defmodule ShopWeb.ProductLive")
       assert String.contains?(result, "Selecto.configure(domain, Shop.Database)")
       assert String.contains?(result, "alias SelectoComponents.Views")
+      assert String.contains?(result, "choice_source_domain: domain")
+      assert String.contains?(result, "choice_source_transport: :live")
+
+      assert String.contains?(
+               result,
+               "choice_source_context: %{surface: :generated_live_view, path: path}"
+             )
 
       assert String.contains?(
                result,
@@ -851,6 +858,9 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "show_view_configurator={@show_view_configurator}")
       assert String.contains?(result, "enable_modal_detail={true}\n")
       assert String.contains?(result, "saved_view_module={@saved_view_module}")
+      assert String.contains?(result, "choice_source_domain={@choice_source_domain}")
+      assert String.contains?(result, "choice_source_context={@choice_source_context}")
+      assert String.contains?(result, "choice_source_transport={@choice_source_transport}")
     end
   end
 

@@ -35,10 +35,13 @@ defmodule SelectoMix.LiveViewGenerator do
               show_view_configurator: false,
               views: views,
               my_path: path,
+              path: path,
               saved_view_module: #{domain_module},
               saved_view_context: path,
-              path: path,
-              available_saved_views: saved_views
+              available_saved_views: saved_views,
+              choice_source_domain: domain,
+              choice_source_context: %{surface: :generated_live_view, path: path},
+              choice_source_transport: :live
             )
         """
       else
@@ -47,7 +50,11 @@ defmodule SelectoMix.LiveViewGenerator do
             assign(socket,
               show_view_configurator: false,
               views: views,
-              my_path: path
+              my_path: path,
+              path: path,
+              choice_source_domain: domain,
+              choice_source_context: %{surface: :generated_live_view, path: path},
+              choice_source_transport: :live
             )
         """
       end
@@ -151,6 +158,9 @@ defmodule SelectoMix.LiveViewGenerator do
       applied_view={nil}
       active_tab={@active_tab}
       views={@views}
+      choice_source_domain={@choice_source_domain}
+      choice_source_context={@choice_source_context}
+      choice_source_transport={@choice_source_transport}
       #{if opts[:enable_modal], do: "enable_modal_detail={true}\n      ", else: ""}show_view_configurator={@show_view_configurator}
       #{saved_view_assigns}
     />
