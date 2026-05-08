@@ -464,6 +464,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           filters: Enum.map(plan.filters, &action_filter_payload/1),
           changes: plan.changes,
           collection_patches: plan.collection_patches,
+          collection_operations: plan.collection_operations,
           returning: plan.returning,
           transition: plan.transition,
           diagnostics: plan.diagnostics,
