@@ -77,7 +77,10 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert controller =~ "OrderApi.apply_domain_action(action, params, api_config(conn))"
       assert controller =~ "defp api_config(_conn)"
       assert api_module =~ "ensure_action_apply_supported(plan)"
+      assert api_module =~ "ActionExecutionAdapter.for_config(config)"
+      assert api_module =~ "ensure_action_dry_run_supported(params)"
       assert api_module =~ "unsupported_action_collection_apply"
+      assert api_module =~ "unsupported_action_dry_run"
 
       assert control_panel =~ ~s(id="updato-write-contract")
       assert control_panel =~ ~s(id="updato-write-templates")

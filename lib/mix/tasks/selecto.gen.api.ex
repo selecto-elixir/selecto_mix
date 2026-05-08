@@ -240,9 +240,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def apply_domain_action(action, params, config \\\\ @default_config) when is_map(params) do
         with {:ok, plan} <- build_domain_action_plan(action, params, config),
-             :ok <- ensure_action_apply_supported(plan),
-             {:ok, operation} <- operation_from_action_plan(plan, config),
-             {:ok, result} <- SelectoUpdato.execute(operation, config.repo) do
+             {:ok, result} <- apply_action_plan(plan, params, config) do
           {:ok,
            %{
              action: plan.action,
@@ -402,6 +400,48 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         SelectoUpdato.plan_domain_action(contract_domain(config), domain_action_intent(action, params, config))
       end
 
+      defp apply_action_plan(plan, params, config) do
+        case SelectoUpdato.ActionExecutionAdapter.for_config(config) do
+          {:ok, adapter} ->
+            context = action_execution_context(params, config)
+
+            if truthy?(map_value(params, :dry_run)) do
+              SelectoUpdato.ActionExecutionAdapter.dry_run(adapter, plan, context)
+            else
+              SelectoUpdato.ActionExecutionAdapter.execute(adapter, plan, context)
+            end
+
+          :none ->
+            with :ok <- ensure_action_dry_run_supported(params),
+                 :ok <- ensure_action_apply_supported(plan),
+                 {:ok, operation} <- operation_from_action_plan(plan, config) do
+              SelectoUpdato.execute(operation, config.repo)
+            end
+        end
+      end
+
+      defp action_execution_context(params, config) do
+        %{
+          repo: map_value(config, :repo),
+          params: params,
+          contract_domain: contract_domain(config),
+          write_domain: domain_for_write(config)
+        }
+        |> maybe_put(:actor, map_value(config, :actor))
+        |> maybe_put(:tenant, map_value(config, :tenant))
+        |> maybe_put(:scope, map_value(config, :action_scope))
+      end
+
+      defp ensure_action_dry_run_supported(params) do
+        if truthy?(map_value(params, :dry_run)) do
+          {:error,
+           {:validation_error, "Action apply dry-run requires an action execution adapter.",
+            DomainContract.json_safe(%{code: :unsupported_action_dry_run})}}
+        else
+          :ok
+        end
+      end
+
       defp ensure_action_apply_supported(plan) do
         if map_size(plan.collection_operations || %{}) > 0 do
           {:error,
@@ -415,6 +455,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           :ok
         end
       end
+
+      defp maybe_put(map, _key, nil), do: map
+      defp maybe_put(map, _key, value) when value == %{}, do: map
+      defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
       defp operation_from_action_plan(plan, config) do
         operation =
@@ -861,6 +905,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp map_value(_map, _key, default), do: default
+
+      defp truthy?(value), do: value in [true, "true", 1, "1"]
 
       defp summarize_operation_contracts(operations) when is_list(operations) do
         Map.new(operations, fn operation ->
