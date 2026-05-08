@@ -526,6 +526,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           collection_operations: plan.collection_operations,
           returning: plan.returning,
           transition: plan.transition,
+          preconditions: plan.preconditions,
           diagnostics: plan.diagnostics,
           operation_builder: operation_builder_payload(plan.operation_builder)
         }

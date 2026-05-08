@@ -79,6 +79,7 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "ensure_action_apply_supported(plan)"
       assert api_module =~ "ActionExecutionAdapter.for_config(config)"
       assert api_module =~ "ensure_action_dry_run_supported(params)"
+      assert api_module =~ "preconditions: plan.preconditions"
       assert api_module =~ "unsupported_action_collection_apply"
       assert api_module =~ "unsupported_action_dry_run"
 
