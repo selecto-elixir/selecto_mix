@@ -240,6 +240,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       def apply_domain_action(action, params, config \\\\ @default_config) when is_map(params) do
         with {:ok, plan} <- build_domain_action_plan(action, params, config),
+             :ok <- ensure_action_apply_supported(plan),
              {:ok, operation} <- operation_from_action_plan(plan, config),
              {:ok, result} <- SelectoUpdato.execute(operation, config.repo) do
           {:ok,
@@ -399,6 +400,20 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       defp build_domain_action_plan(action, params, config) do
         SelectoUpdato.plan_domain_action(contract_domain(config), domain_action_intent(action, params, config))
+      end
+
+      defp ensure_action_apply_supported(plan) do
+        if map_size(plan.collection_operations || %{}) > 0 do
+          {:error,
+           {:validation_error,
+            "Action apply with collection operations requires an action execution adapter.",
+            DomainContract.json_safe(%{
+              code: :unsupported_action_collection_apply,
+              collection_operations: plan.collection_operations
+            })}}
+        else
+          :ok
+        end
       end
 
       defp operation_from_action_plan(plan, config) do
