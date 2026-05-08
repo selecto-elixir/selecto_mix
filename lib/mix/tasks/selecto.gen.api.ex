@@ -229,6 +229,32 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
          })}
       end
 
+      def preview_domain_action(action, params, config \\\\ @default_config) when is_map(params) do
+        with {:ok, plan} <- build_domain_action_plan(action, params, config) do
+          {:ok, action_plan_payload(plan)}
+        else
+          {:error, error} when is_map(error) -> {:error, action_plan_error(error)}
+          {:error, reason} -> {:error, reason}
+        end
+      end
+
+      def apply_domain_action(action, params, config \\\\ @default_config) when is_map(params) do
+        with {:ok, plan} <- build_domain_action_plan(action, params, config),
+             {:ok, operation} <- operation_from_action_plan(plan, config),
+             {:ok, result} <- SelectoUpdato.execute(operation, config.repo) do
+          {:ok,
+           %{
+             action: plan.action,
+             operation: plan.operation,
+             preview: action_plan_payload(plan),
+             result: result
+           }}
+        else
+          {:error, error} when is_map(error) -> {:error, action_plan_error(error)}
+          {:error, reason} -> {:error, reason}
+        end
+      end
+
       def write_template_operations(config \\\\ @default_config) do
         operations =
           config
@@ -371,6 +397,97 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         error -> {:error, {:invalid_request, Exception.message(error)}}
       end
 
+      defp build_domain_action_plan(action, params, config) do
+        SelectoUpdato.plan_domain_action(contract_domain(config), domain_action_intent(action, params, config))
+      end
+
+      defp operation_from_action_plan(plan, config) do
+        operation =
+          config
+          |> domain_for_write()
+          |> SelectoUpdato.new()
+          |> apply_filters(plan.filters)
+          |> apply_action(plan.operation, plan.changes, %{})
+          |> maybe_set_returning(plan.returning)
+
+        {:ok, operation}
+      rescue
+        error -> {:error, {:invalid_request, Exception.message(error)}}
+      end
+
+      defp domain_action_intent(action, params, config) do
+        body =
+          case Map.get(params, "intent") || Map.get(params, :intent) do
+            %{} = intent -> intent
+            _ -> params
+          end
+
+        action_id = normalize_domain_action(action || map_value(body, :action))
+        filters = List.wrap(map_value(body, :filters, [])) ++ trusted_action_filters(action_id, body, config)
+
+        body
+        |> Map.drop(["_format", "action", :action])
+        |> Map.put("action", action_id)
+        |> Map.put("filters", filters)
+      end
+
+      defp trusted_action_filters(action, params, config) do
+        source =
+          Map.get(config, :action_scope_filters) ||
+            Map.get(config, "action_scope_filters") ||
+            Map.get(config, :trusted_action_filters) ||
+            Map.get(config, "trusted_action_filters") ||
+            []
+
+        filters =
+          cond do
+            is_function(source, 3) -> source.(action, params, config)
+            is_function(source, 2) -> source.(action, params)
+            is_function(source, 1) -> source.(params)
+            true -> source
+          end
+
+        List.wrap(filters)
+      end
+
+      defp action_plan_payload(plan) do
+        %{
+          valid: true,
+          action: plan.action,
+          capability: plan.capability,
+          operation: plan.operation,
+          operation_intent: plan.operation_intent,
+          target: plan.target,
+          filters: Enum.map(plan.filters, &action_filter_payload/1),
+          changes: plan.changes,
+          returning: plan.returning,
+          transition: plan.transition,
+          diagnostics: plan.diagnostics,
+          operation_builder: operation_builder_payload(plan.operation_builder)
+        }
+        |> DomainContract.json_safe()
+      end
+
+      defp action_filter_payload({field, value}), do: %{field: field, comparator: "eq", value: value}
+      defp action_filter_payload({field, comparator, value}), do: %{field: field, comparator: comparator, value: value}
+      defp action_filter_payload(filter), do: filter
+
+      defp operation_builder_payload(nil), do: nil
+
+      defp operation_builder_payload(operation) do
+        %{
+          type: Map.get(operation, :type),
+          filters: Map.get(operation, :filters, []),
+          changes: Map.get(operation, :changes),
+          attrs: Map.get(operation, :attrs),
+          returning: Map.get(operation, :returning)
+        }
+      end
+
+      defp action_plan_error(error) do
+        {:validation_error, Map.get(error, :message, "action could not be planned"), DomainContract.json_safe(error)}
+      end
+
       defp build_query(params, config) do
         domain = config.domain_module.domain()
 
@@ -391,6 +508,10 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       defp normalize_action(value) when is_binary(value), do: String.downcase(value)
       defp normalize_action(value) when is_atom(value), do: value |> Atom.to_string() |> String.downcase()
       defp normalize_action(_), do: "insert"
+
+      defp normalize_domain_action(value) when is_binary(value), do: String.downcase(value)
+      defp normalize_domain_action(value) when is_atom(value), do: value |> Atom.to_string() |> String.downcase()
+      defp normalize_domain_action(value), do: value |> to_string() |> String.downcase()
 
       defp validate_id(id) when id in [nil, ""], do: {:error, {:validation_error, "id is required"}}
       defp validate_id(_id), do: :ok
@@ -449,9 +570,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       defp valid_offset?(_), do: false
 
       defp apply_filters(operation, filters) do
-        Enum.reduce(filters, operation, fn {field, value}, op ->
-          SelectoUpdato.filter(op, {field, value})
-        end)
+        Enum.reduce(filters, operation, fn filter, op -> SelectoUpdato.filter(op, filter) end)
       end
 
       defp apply_action(operation, "insert", attributes, _params),
@@ -481,6 +600,14 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
       defp apply_action(operation, _action, attributes, _params),
         do: SelectoUpdato.insert(operation, attributes)
+
+      defp maybe_set_returning(operation, nil), do: operation
+      defp maybe_set_returning(operation, []), do: operation
+      defp maybe_set_returning(operation, "record"), do: SelectoUpdato.returning(operation, :record)
+      defp maybe_set_returning(operation, "records"), do: SelectoUpdato.returning(operation, :records)
+      defp maybe_set_returning(operation, "count"), do: SelectoUpdato.returning(operation, :count)
+      defp maybe_set_returning(operation, "none"), do: SelectoUpdato.returning(operation, :none)
+      defp maybe_set_returning(operation, returning), do: SelectoUpdato.returning(operation, returning)
 
       defp apply_query_filters(selecto, filters) do
         Enum.reduce(filters, selecto, fn {field, value}, query ->
@@ -1291,14 +1418,38 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     defmodule #{config.web_module}.#{config.name_module}ApiController do
       use #{config.web_module}, :controller
 
-      plug :reject_large_payload when action in [:create, :query]
-      plug :throttle_requests when action in [:create, :query, :show]
+      plug :reject_large_payload when action in [:create, :query, :preview_action, :apply_action]
+      plug :throttle_requests when action in [:create, :query, :show, :preview_action, :apply_action]
 
       alias #{config.app_module}.UpdatoApi.#{config.name_module}Api
 
       def create(conn, params) do
         with :ok <- authorize_api_request(conn, :create),
              {:ok, payload} <- #{config.name_module}Api.execute(params, api_config(conn)) do
+          json(conn, success_envelope(conn, payload))
+        else
+          {:error, reason} ->
+            conn
+            |> put_status(status_for_reason(reason))
+            |> json(error_envelope(conn, reason))
+          end
+      end
+
+      def preview_action(conn, %{"action" => action} = params) do
+        with :ok <- authorize_api_request(conn, {:preview_action, action}),
+             {:ok, payload} <- #{config.name_module}Api.preview_domain_action(action, params, api_config(conn)) do
+          json(conn, success_envelope(conn, payload))
+        else
+          {:error, reason} ->
+            conn
+            |> put_status(status_for_reason(reason))
+            |> json(error_envelope(conn, reason))
+        end
+      end
+
+      def apply_action(conn, %{"action" => action} = params) do
+        with :ok <- authorize_api_request(conn, {:apply_action, action}),
+             {:ok, payload} <- #{config.name_module}Api.apply_domain_action(action, params, api_config(conn)) do
           json(conn, success_envelope(conn, payload))
         else
           {:error, reason} ->
@@ -1450,6 +1601,14 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         }
       end
 
+      defp error_envelope(conn, {:validation_error, message, details}) do
+        %{
+          ok: false,
+          error: %{code: "validation_error", message: message, details: details},
+          meta: %{request_id: request_id(conn)}
+        }
+      end
+
       defp error_envelope(conn, {:invalid_request, message}) do
         %{
           ok: false,
@@ -1503,6 +1662,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp status_for_reason({:validation_error, _}), do: :bad_request
+      defp status_for_reason({:validation_error, _, _}), do: :bad_request
       defp status_for_reason({:invalid_request, _}), do: :bad_request
       defp status_for_reason({:invalid_query, _}), do: :bad_request
       defp status_for_reason({:payload_too_large, _}), do: :payload_too_large
@@ -1970,6 +2130,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         scope "/api", #{config.web_module} do
           pipe_through :api
           post "#{config.api_path |> String.replace_prefix("/api", "")}", #{config.name_module}ApiController, :create
+          post "#{config.api_path |> String.replace_prefix("/api", "")}/actions/:action/preview", #{config.name_module}ApiController, :preview_action
+          post "#{config.api_path |> String.replace_prefix("/api", "")}/actions/:action/apply", #{config.name_module}ApiController, :apply_action
           post "#{config.api_path |> String.replace_prefix("/api", "")}/query", #{config.name_module}ApiController, :query
           get "#{config.api_path |> String.replace_prefix("/api", "")}/config", #{config.name_module}ApiController, :config
           get "#{config.api_path |> String.replace_prefix("/api", "")}/:id", #{config.name_module}ApiController, :show
@@ -2014,6 +2176,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
          Derive actor, tenant, and required filters from socket/session state, not browser parameters.
       4. For security-sensitive choice filters, add constraint_policy: %{domain_of_interest: :fail_closed} in the domain overlay and make resolvers reject unenforced trusted filters.
       5. If the generated controller accepts choice-backed writes, customize api_config/1 with the same server-owned membership resolver and secure scope.
+      6. If you expose action apply endpoints, customize authorize_api_request/2 and api_config/1 so actor, tenant, and trusted action filters come from conn/session state, not browser parameters.
     """)
   end
 end

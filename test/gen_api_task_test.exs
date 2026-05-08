@@ -35,6 +35,13 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
       assert api_module =~ "def validate_intent(params, config \\\\ @default_config)"
+
+      assert api_module =~
+               "def preview_domain_action(action, params, config \\\\ @default_config)"
+
+      assert api_module =~ "def apply_domain_action(action, params, config \\\\ @default_config)"
+      assert api_module =~ "SelectoUpdato.plan_domain_action(contract_domain(config)"
+      assert api_module =~ "trusted_action_filters(action_id, body, config)"
       assert api_module =~ "def write_template_operations(config \\\\ @default_config)"
 
       assert api_module =~
@@ -64,6 +71,10 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert controller =~ "write_contract: write_contract"
       assert controller =~ "capabilities: OrderApi.write_contract_summary()"
       assert controller =~ "OrderApi.execute(params, api_config(conn))"
+      assert controller =~ "def preview_action(conn, %{\"action\" => action} = params)"
+      assert controller =~ "OrderApi.preview_domain_action(action, params, api_config(conn))"
+      assert controller =~ "def apply_action(conn, %{\"action\" => action} = params)"
+      assert controller =~ "OrderApi.apply_domain_action(action, params, api_config(conn))"
       assert controller =~ "defp api_config(_conn)"
 
       assert control_panel =~ ~s(id="updato-write-contract")
@@ -98,10 +109,13 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert is_integer(config_index)
       assert is_integer(show_index)
       assert config_index < show_index
+      assert output =~ ~s(post "/v1/updato/orders/actions/:action/preview")
+      assert output =~ ~s(post "/v1/updato/orders/actions/:action/apply")
       assert output =~ "For choice-backed write fields"
       assert output =~ "socket/session state, not browser parameters"
       assert output =~ "constraint_policy: %{domain_of_interest: :fail_closed}"
       assert output =~ "reject unenforced trusted filters"
+      assert output =~ "trusted action filters come from conn/session state"
     end)
   end
 
