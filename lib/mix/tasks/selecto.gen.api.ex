@@ -387,7 +387,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
         operation =
           domain
-          |> SelectoUpdato.new()
+          |> SelectoUpdato.new(operation_options(config))
           |> apply_filters(filters)
           |> apply_action(action, attributes, params)
 
@@ -463,11 +463,30 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       defp maybe_put(map, _key, value) when value == %{}, do: map
       defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
+      defp operation_options(config) do
+        scope = map_value(config, :choice_source_scope, %{})
+
+        [
+          actor:
+            map_value(config, :actor, map_value(config, :choice_source_actor, map_value(scope, :actor))),
+          tenant:
+            map_value(config, :tenant, map_value(config, :choice_source_tenant, map_value(scope, :tenant))),
+          choice_source_domain: map_value(config, :choice_source_domain),
+          choice_source_membership_resolver: map_value(config, :choice_source_membership_resolver),
+          choice_source_context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
+          choice_source_filters: map_value(config, :choice_source_filters, map_value(scope, :filters, []))
+        ]
+        |> Enum.reject(fn
+          {:choice_source_membership_resolver, resolver} -> not is_function(resolver, 1)
+          {_key, value} -> value in [nil, %{}, []]
+        end)
+      end
+
       defp operation_from_action_plan(plan, config) do
         operation =
           config
           |> domain_for_write()
-          |> SelectoUpdato.new()
+          |> SelectoUpdato.new(operation_options(config))
           |> apply_filters(plan.filters)
           |> apply_action(plan.operation, plan.changes, %{})
           |> maybe_set_returning(plan.returning)
