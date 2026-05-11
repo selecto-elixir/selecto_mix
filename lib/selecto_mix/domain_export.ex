@@ -15,7 +15,8 @@ defmodule SelectoMix.DomainExport do
     "choice_sources" => "cross-domain choices and constraint policy",
     "detail_actions" => "user-visible detail actions",
     "source_relationships" => "cross-domain source bindings",
-    "writes" => "write operations, fields, validations, constraints, and transitions"
+    "writes" =>
+      "write operations, fields, relationships, scope, hooks, validations, constraints, and transitions"
   }
 
   @type export_error ::
@@ -348,9 +349,12 @@ defmodule SelectoMix.DomainExport do
       detail_actions: domain |> map_get("detail_actions", %{}) |> count_map(),
       write_operations: writes |> map_get("operations", %{}) |> count_map(),
       write_fields: writes |> map_get("fields", %{}) |> count_map(),
+      write_relationships: writes |> map_get("relationships", %{}) |> count_map(),
       write_transitions: writes |> map_get("transitions", %{}) |> count_map(),
       write_validations: writes |> map_get("validations", []) |> count_list(),
       write_constraints: writes |> map_get("constraints", []) |> count_list(),
+      write_scope: writes |> map_get("scope", %{}) |> count_map(),
+      write_hooks: writes |> map_get("hooks", %{}) |> count_map(),
       actions: domain |> map_get("actions", %{}) |> count_map(),
       capabilities: domain |> map_get("capabilities", %{}) |> count_map(),
       source_relationships: domain |> map_get("source_relationships", %{}) |> count_map(),
@@ -370,7 +374,10 @@ defmodule SelectoMix.DomainExport do
       detail_actions: registry_names(domain, "detail_actions"),
       write_operations: registry_names(writes, "operations"),
       write_fields: registry_names(writes, "fields"),
+      write_relationships: registry_names(writes, "relationships"),
       write_transitions: registry_names(writes, "transitions"),
+      write_scope: registry_names(writes, "scope"),
+      write_hooks: registry_names(writes, "hooks"),
       actions: registry_names(domain, "actions"),
       capabilities: registry_names(domain, "capabilities"),
       source_relationships: registry_names(domain, "source_relationships"),
@@ -433,20 +440,27 @@ defmodule SelectoMix.DomainExport do
   end
 
   defp security_writes(writes) when is_map(writes) do
-    items = %{
-      "operations" => registry_names(writes, "operations"),
-      "fields" => registry_names(writes, "fields"),
-      "transitions" => registry_names(writes, "transitions"),
-      "validations_count" => writes |> map_get("validations", []) |> count_list(),
-      "constraints_count" => writes |> map_get("constraints", []) |> count_list()
-    }
+    items =
+      %{
+        "operations" => registry_names(writes, "operations"),
+        "fields" => registry_names(writes, "fields"),
+        "transitions" => registry_names(writes, "transitions"),
+        "validations_count" => writes |> map_get("validations", []) |> count_list(),
+        "constraints_count" => writes |> map_get("constraints", []) |> count_list()
+      }
+      |> maybe_put_nonempty("relationships", registry_names(writes, "relationships"))
+      |> maybe_put_nonempty("scope", registry_names(writes, "scope"))
+      |> maybe_put_nonempty("hooks", registry_names(writes, "hooks"))
 
     count =
       length(Map.fetch!(items, "operations")) +
         length(Map.fetch!(items, "fields")) +
+        length(Map.get(items, "relationships", [])) +
         length(Map.fetch!(items, "transitions")) +
         Map.fetch!(items, "validations_count") +
-        Map.fetch!(items, "constraints_count")
+        Map.fetch!(items, "constraints_count") +
+        length(Map.get(items, "scope", [])) +
+        length(Map.get(items, "hooks", []))
 
     if count > 0 do
       %{
@@ -459,6 +473,9 @@ defmodule SelectoMix.DomainExport do
   end
 
   defp security_writes(_writes), do: nil
+
+  defp maybe_put_nonempty(map, _key, []), do: map
+  defp maybe_put_nonempty(map, key, value), do: Map.put(map, key, value)
 
   defp diagnostics_summary(diagnostics) do
     errors = diagnostic_items(diagnostics, :errors)

@@ -533,9 +533,17 @@ defmodule SelectoMix.DomainDiagram do
 
   defp format_list(values) when is_list(values) do
     values
-    |> Enum.map(&to_string/1)
+    |> Enum.map(&format_value/1)
     |> Enum.join(", ")
   end
+
+  defp format_list(%{} = value) when map_size(value) == 0, do: "(none)"
+  defp format_list(%{} = value), do: value |> Map.keys() |> format_list()
+  defp format_list(value), do: format_value(value)
+
+  defp format_value(value) when is_binary(value), do: value
+  defp format_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp format_value(value), do: inspect(value)
 
   defp format_constraint_policy(policy) when is_map(policy) do
     policy
@@ -556,10 +564,14 @@ defmodule SelectoMix.DomainDiagram do
     [
       {"operations", format_list(map_get(items, "operations", []))},
       {"fields", format_list(map_get(items, "fields", []))},
+      {"relationships", format_list(map_get(items, "relationships", []))},
       {"transitions", format_list(map_get(items, "transitions", []))},
       {"validations", map_get(items, "validations_count", 0)},
-      {"constraints", map_get(items, "constraints_count", 0)}
+      {"constraints", map_get(items, "constraints_count", 0)},
+      {"scope", format_list(map_get(items, "scope", []))},
+      {"hooks", format_list(map_get(items, "hooks", []))}
     ]
+    |> Enum.reject(fn {_label, value} -> value in ["(none)", 0] end)
     |> Enum.map(fn {label, value} -> "#{label}: #{value}" end)
     |> Enum.join("; ")
   end

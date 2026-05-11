@@ -17,7 +17,8 @@ defmodule SelectoMix.DomainInspection do
     "choice_sources" => "cross-domain choices and constraint policy",
     "detail_actions" => "user-visible detail actions",
     "source_relationships" => "cross-domain source bindings",
-    "writes" => "write operations, fields, validations, constraints, and transitions"
+    "writes" =>
+      "write operations, fields, relationships, scope, hooks, validations, constraints, and transitions"
   }
 
   @type inspection_error ::
@@ -137,20 +138,30 @@ defmodule SelectoMix.DomainInspection do
   end
 
   defp security_writes(writes) when is_map(writes) do
-    items = %{
-      "operations" => writes |> map_get("operations", %{}) |> sorted_keys(),
-      "fields" => writes |> map_get("fields", %{}) |> sorted_keys(),
-      "transitions" => writes |> map_get("transitions", %{}) |> sorted_keys(),
-      "validations_count" => writes |> map_get("validations", []) |> list_count(),
-      "constraints_count" => writes |> map_get("constraints", []) |> list_count()
-    }
+    items =
+      %{
+        "operations" => writes |> map_get("operations", %{}) |> sorted_keys(),
+        "fields" => writes |> map_get("fields", %{}) |> sorted_keys(),
+        "transitions" => writes |> map_get("transitions", %{}) |> sorted_keys(),
+        "validations_count" => writes |> map_get("validations", []) |> list_count(),
+        "constraints_count" => writes |> map_get("constraints", []) |> list_count()
+      }
+      |> maybe_put_nonempty(
+        "relationships",
+        writes |> map_get("relationships", %{}) |> sorted_keys()
+      )
+      |> maybe_put_nonempty("scope", writes |> map_get("scope", %{}) |> sorted_keys())
+      |> maybe_put_nonempty("hooks", writes |> map_get("hooks", %{}) |> sorted_keys())
 
     count =
       length(Map.fetch!(items, "operations")) +
         length(Map.fetch!(items, "fields")) +
+        length(Map.get(items, "relationships", [])) +
         length(Map.fetch!(items, "transitions")) +
         Map.fetch!(items, "validations_count") +
-        Map.fetch!(items, "constraints_count")
+        Map.fetch!(items, "constraints_count") +
+        length(Map.get(items, "scope", [])) +
+        length(Map.get(items, "hooks", []))
 
     if count > 0 do
       %{
@@ -163,6 +174,9 @@ defmodule SelectoMix.DomainInspection do
   end
 
   defp security_writes(_writes), do: nil
+
+  defp maybe_put_nonempty(map, _key, []), do: map
+  defp maybe_put_nonempty(map, key, value), do: Map.put(map, key, value)
 
   defp sorted_keys(value) when is_map(value) do
     value

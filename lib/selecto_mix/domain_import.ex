@@ -42,7 +42,8 @@ defmodule SelectoMix.DomainImport do
     "choice_sources" => "cross-domain choices and constraint policy",
     "detail_actions" => "user-visible detail actions",
     "source_relationships" => "cross-domain source bindings",
-    "writes" => "write operations, fields, validations, constraints, and transitions"
+    "writes" =>
+      "write operations, fields, relationships, scope, hooks, validations, constraints, and transitions"
   }
 
   @spec plan_file(Path.t(), keyword()) :: {:ok, map()} | {:error, DomainExport.artifact_error()}

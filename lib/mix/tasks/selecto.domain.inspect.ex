@@ -30,9 +30,12 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     :detail_actions,
     :write_operations,
     :write_fields,
+    :write_relationships,
     :write_transitions,
     :write_validations,
     :write_constraints,
+    :write_scope,
+    :write_hooks,
     :actions,
     :capabilities,
     :source_relationships,
@@ -47,7 +50,10 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     :detail_actions,
     :write_operations,
     :write_fields,
+    :write_relationships,
     :write_transitions,
+    :write_scope,
+    :write_hooks,
     :actions,
     :capabilities,
     :source_relationships,
@@ -163,16 +169,33 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
   end
 
   defp format_list([]), do: "(none)"
-  defp format_list(values), do: Enum.join(values, ", ")
+
+  defp format_list(values) when is_list(values) do
+    values
+    |> Enum.map(&format_value/1)
+    |> Enum.join(", ")
+  end
+
+  defp format_list(%{} = value) when map_size(value) == 0, do: "(none)"
+  defp format_list(%{} = value), do: value |> Map.keys() |> format_list()
+  defp format_list(value), do: format_value(value)
+
+  defp format_value(value) when is_binary(value), do: value
+  defp format_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp format_value(value), do: inspect(value)
 
   defp format_security_items(items) when is_map(items) do
     [
       {"operations", format_list(Map.get(items, "operations", []))},
       {"fields", format_list(Map.get(items, "fields", []))},
+      {"relationships", format_list(Map.get(items, "relationships", []))},
       {"transitions", format_list(Map.get(items, "transitions", []))},
       {"validations", Map.get(items, "validations_count", 0)},
-      {"constraints", Map.get(items, "constraints_count", 0)}
+      {"constraints", Map.get(items, "constraints_count", 0)},
+      {"scope", format_list(Map.get(items, "scope", []))},
+      {"hooks", format_list(Map.get(items, "hooks", []))}
     ]
+    |> Enum.reject(fn {_label, value} -> value in ["(none)", 0] end)
     |> Enum.map(fn {label, value} -> "#{label}: #{value}" end)
     |> Enum.join("; ")
   end

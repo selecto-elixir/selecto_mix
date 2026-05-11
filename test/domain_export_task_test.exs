@@ -274,6 +274,9 @@ defmodule SelectoMix.DomainExportTaskTest do
         writes: %{
           operations: %{update: %{fields: [:name]}},
           fields: %{name: %{updatable: true}},
+          relationships: %{audit_log: %{writable: true, cardinality: :many}},
+          scope: %{tenant: %{required: true, field: :id, satisfied_by: [:trusted_context]}},
+          hooks: %{before_validate: [{__MODULE__, :before_validate}]},
           transitions: %{status: %{"active" => ["archived"]}},
           validations: [%{field: :name}],
           constraints: [%{field: :name}]
@@ -527,7 +530,8 @@ defmodule SelectoMix.DomainExportTaskTest do
                %{
                  "name" => "writes",
                  "status" => "reconstructable",
-                 "reason" => "write operations, fields, validations, constraints, and transitions"
+                 "reason" =>
+                   "write operations, fields, relationships, scope, hooks, validations, constraints, and transitions"
                }
              ]
     end)
@@ -731,15 +735,21 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "detail actions: 1"
       assert output =~ "write operations: 1"
       assert output =~ "write fields: 1"
+      assert output =~ "write relationships: 1"
       assert output =~ "write transitions: 1"
       assert output =~ "write validations: 1"
       assert output =~ "write constraints: 1"
+      assert output =~ "write scope: 1"
+      assert output =~ "write hooks: 1"
       assert output =~ "actions: 1"
       assert output =~ "capabilities: 6"
       assert output =~ "detail actions: profile"
       assert output =~ "write operations: update"
       assert output =~ "write fields: name"
+      assert output =~ "write relationships: audit_log"
       assert output =~ "write transitions: status"
+      assert output =~ "write scope: tenant"
+      assert output =~ "write hooks: before_validate"
       assert output =~ "actions: archive"
 
       assert output =~
@@ -750,7 +760,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "choice_sources: 1 (owner_choices)"
 
       assert output =~
-               "writes: 5 (operations: update; fields: name; transitions: status; validations: 1; constraints: 1)"
+               "writes: 8 (operations: update; fields: name; relationships: audit_log; transitions: status; validations: 1; constraints: 1; scope: tenant; hooks: before_validate)"
     end)
   end
 
@@ -817,7 +827,7 @@ defmodule SelectoMix.DomainExportTaskTest do
                "| choice_sources | 1 | owner_choices | cross-domain choices and constraint policy |"
 
       assert docs =~
-               "| writes | 5 | operations: update; fields: name; transitions: status; validations: 1; constraints: 1 | write operations, fields, validations, constraints, and transitions |"
+               "| writes | 8 | operations: update; fields: name; relationships: audit_log; transitions: status; validations: 1; constraints: 1; scope: tenant; hooks: before_validate | write operations, fields, relationships, scope, hooks, validations, constraints, and transitions |"
 
       assert docs =~ "## Capability Usage"
       assert docs =~ "| Capability | Role | Section | Target | Path |"
@@ -944,15 +954,19 @@ defmodule SelectoMix.DomainExportTaskTest do
                },
                %{
                  "section" => "writes",
-                 "count" => 5,
+                 "count" => 8,
                  "items" => %{
                    "operations" => ["update"],
                    "fields" => ["name"],
+                   "relationships" => ["audit_log"],
                    "transitions" => ["status"],
                    "validations_count" => 1,
-                   "constraints_count" => 1
+                   "constraints_count" => 1,
+                   "scope" => ["tenant"],
+                   "hooks" => ["before_validate"]
                  },
-                 "reason" => "write operations, fields, validations, constraints, and transitions"
+                 "reason" =>
+                   "write operations, fields, relationships, scope, hooks, validations, constraints, and transitions"
                }
              ]
     end)
