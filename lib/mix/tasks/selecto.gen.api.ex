@@ -411,6 +411,9 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
               SelectoUpdato.ActionExecutionAdapter.execute(adapter, plan, context)
             end
 
+          {:error, reason} ->
+            {:error, reason}
+
           :none ->
             with :ok <- ensure_action_dry_run_supported(params),
                  :ok <- ensure_action_apply_supported(plan),
