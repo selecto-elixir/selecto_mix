@@ -29,12 +29,12 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       control_panel = File.read!("lib/selecto_mix_web/live/orders_api_control_panel_live.ex")
 
       assert api_module =~ "alias SelectoUpdato.DomainContract"
-      assert api_module =~ "alias Selecto.Domain.Choices"
-      assert api_module =~ "alias Selecto.Domain.Choices.Result"
       assert api_module =~ "def choice_source_domain(config"
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
       assert api_module =~ "def validate_intent(params, config \\\\ @default_config)"
+      assert api_module =~ "DomainContract.validate_intent("
+      assert api_module =~ "operation_options(config)"
 
       assert api_module =~
                "def preview_domain_action(action, params, config \\\\ @default_config)"
@@ -57,13 +57,14 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
                "def validate_write_form(operation, params, config \\\\ @default_config)"
 
       assert api_module =~ "field_errors: field_errors"
-      assert api_module =~ "form_choice_source_errors(form_config, params, config)"
       assert api_module =~ "validate_choice_source_params(params, config)"
-      assert api_module =~ "Choices.validate_choice(domain, field_id, value, request_attrs)"
+      refute api_module =~ "Choices.validate_choice"
       assert api_module =~ "SelectoUpdato.new(operation_options(config))"
       assert api_module =~ "defp operation_options(config)"
       assert api_module =~ "choice_source_domain: map_value(config, :choice_source_domain)"
       assert api_module =~ "choice_source_filters: map_value(config, :choice_source_filters"
+      assert api_module =~ "choice_source_record: map_value(config, :choice_source_record"
+      assert api_module =~ "choice_source_metadata: map_value(config, :choice_source_metadata"
       assert api_module =~ "choice_source: Map.get(field, \"choice_source\")"
       assert api_module =~ "choice_source: Map.get(config, :choice_source)"
       assert api_module =~ "defp sample_template_value(%{} = config)"

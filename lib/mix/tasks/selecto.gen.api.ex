@@ -175,8 +175,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       \"\"\"
 
       alias Selecto
-      alias Selecto.Domain.Choices
-      alias Selecto.Domain.Choices.Result
       alias SelectoUpdato
       alias SelectoUpdato.DomainContract
 
@@ -219,7 +217,12 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       def validate_intent(params, config \\\\ @default_config) when is_map(params) do
-        result = DomainContract.validate_intent(contract_domain(config), normalize_intent(params))
+        result =
+          DomainContract.validate_intent(
+            contract_domain(config),
+            normalize_intent(params),
+            operation_options(config)
+          )
 
         {:ok,
          DomainContract.json_safe(%{
@@ -322,7 +325,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
         errors =
           form_required_errors(form_config, params) ++
-            form_choice_source_errors(form_config, params, config) ++
             Map.get(contract_validation, "errors", [])
 
         field_errors = validation_errors_by(errors, "field")
@@ -474,7 +476,9 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
           choice_source_domain: map_value(config, :choice_source_domain),
           choice_source_membership_resolver: map_value(config, :choice_source_membership_resolver),
           choice_source_context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
-          choice_source_filters: map_value(config, :choice_source_filters, map_value(scope, :filters, []))
+          choice_source_filters: map_value(config, :choice_source_filters, map_value(scope, :filters, [])),
+          choice_source_record: map_value(config, :choice_source_record, map_value(scope, :record)),
+          choice_source_metadata: map_value(config, :choice_source_metadata, map_value(scope, :metadata, %{}))
         ]
         |> Enum.reject(fn
           {:choice_source_membership_resolver, resolver} -> not is_function(resolver, 1)
@@ -1207,33 +1211,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         field_errors ++ filter_errors
       end
 
-      defp form_choice_source_errors(form_config, params, config) do
-        resolver = map_value(config, :choice_source_membership_resolver)
-        domain = map_value(config, :choice_source_domain, contract_domain(config))
-
-        if is_function(resolver, 1) and is_map(domain) do
-          field_values = map_value(params, :fields, %{})
-          request_attrs = choice_source_request_attrs(config, resolver)
-
-          form_config
-          |> map_value(:fields, [])
-          |> Enum.filter(&choice_source_field?/1)
-          |> Enum.flat_map(fn field ->
-            field_id = map_value(field, :id)
-            raw_value = value_for_key(field_values, field_id, nil)
-
-            if blank_form_value?(raw_value) do
-              []
-            else
-              value = coerce_form_value(raw_value, map_value(field, :type))
-              choice_source_validation_error(domain, field_id, value, field, request_attrs)
-            end
-          end)
-        else
-          []
-        end
-      end
-
       defp validate_choice_source_params(params, config) do
         case choice_source_param_errors(params, config) do
           [] -> :ok
@@ -1242,118 +1219,16 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       end
 
       defp choice_source_param_errors(params, config) do
-        resolver = map_value(config, :choice_source_membership_resolver)
-        domain = map_value(config, :choice_source_domain, contract_domain(config))
+        case validate_intent(params, config) do
+          {:ok, %{"errors" => errors}} when is_list(errors) ->
+            Enum.filter(errors, &choice_source_error?/1)
 
-        if is_function(resolver, 1) and is_map(domain) do
-          field_configs = choice_source_field_configs(config)
-          request_attrs = choice_source_request_attrs(config, resolver)
+          {:ok, %{errors: errors}} when is_list(errors) ->
+            Enum.filter(errors, &choice_source_error?/1)
 
-          params
-          |> choice_source_value_sets()
-          |> Enum.flat_map(fn {path, values} ->
-            choice_source_value_errors(domain, field_configs, request_attrs, path, values)
-          end)
-        else
-          []
-        end
-      end
-
-      defp choice_source_field_configs(config) do
-        config
-        |> write_contract_summary()
-        |> Map.get(:fields, %{})
-        |> Enum.filter(fn {_field_id, field} -> choice_source_field?(field) end)
-        |> Map.new()
-      end
-
-      defp choice_source_value_sets(params) do
-        attribute_sets =
-          case Map.get(params, "attributes", %{}) do
-            attributes when is_map(attributes) -> [{["attributes"], attributes}]
-            _attributes -> []
-          end
-
-        record_sets =
-          params
-          |> Map.get("records", [])
-          |> Enum.with_index()
-          |> Enum.flat_map(fn
-            {record, index} when is_map(record) -> [{["records", index], record}]
-            _entry -> []
-          end)
-
-        attribute_sets ++ record_sets
-      end
-
-      defp choice_source_value_errors(domain, field_configs, request_attrs, path, values) do
-        values
-        |> Enum.flat_map(fn {field_id, raw_value} ->
-          field_id = to_string(field_id)
-
-          case Map.get(field_configs, field_id) do
-            nil ->
-              []
-
-            field ->
-              if blank_form_value?(raw_value) do
-                []
-              else
-                value = coerce_form_value(raw_value, map_value(field, :type))
-                choice_source_validation_error(domain, field_id, value, field, request_attrs, path)
-              end
-          end
-        end)
-      end
-
-      defp choice_source_validation_error(domain, field_id, value, field, request_attrs) do
-        choice_source_validation_error(domain, field_id, value, field, request_attrs, ["fields"])
-      end
-
-      defp choice_source_validation_error(domain, field_id, value, field, request_attrs, path) do
-        case Choices.validate_choice(domain, field_id, value, request_attrs) do
-          {:ok, %Result{status: :valid}} ->
+          _result ->
             []
-
-          {:error, %Result{} = result} ->
-            [choice_source_error(field_id, field, result, path)]
-
-          {:error, error} ->
-            [choice_source_error(field_id, field, error, path)]
         end
-      end
-
-      defp choice_source_error(field_id, field, %Result{status: :invalid} = result, path) do
-        %{
-          code: "choice_source_invalid",
-          path: path,
-          field: field_id,
-          choice_source: map_value(field, :choice_source),
-          reason: to_string(result.reason_code || :choice_invalid),
-          message: "\#{map_value(field, :label, field_id)} is not an available choice"
-        }
-      end
-
-      defp choice_source_error(field_id, field, %Result{} = result, path) do
-        %{
-          code: "choice_source_unverified",
-          path: path,
-          field: field_id,
-          choice_source: map_value(field, :choice_source),
-          reason: to_string(result.reason_code || :choice_unknown),
-          message: "\#{map_value(field, :label, field_id)} could not be verified"
-        }
-      end
-
-      defp choice_source_error(field_id, field, error, path) do
-        %{
-          code: "choice_source_validation_error",
-          path: path,
-          field: field_id,
-          choice_source: map_value(field, :choice_source),
-          reason: inspect(error),
-          message: "\#{map_value(field, :label, field_id)} could not be verified"
-        }
       end
 
       defp choice_source_field?(field) do
@@ -1368,19 +1243,11 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         choice_source_field?(field) and blank_form_value?(value)
       end
 
-      defp choice_source_request_attrs(config, resolver) do
-        scope = map_value(config, :choice_source_scope, %{})
-
-        [
-          resolver: resolver,
-          actor: map_value(config, :choice_source_actor, map_value(scope, :actor)),
-          tenant: map_value(config, :choice_source_tenant, map_value(scope, :tenant)),
-          record: map_value(config, :choice_source_record, map_value(scope, :record)),
-          filters: map_value(config, :choice_source_filters, map_value(scope, :filters, [])),
-          context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
-          metadata: map_value(config, :choice_source_metadata, map_value(scope, :metadata, %{}))
-        ]
-        |> Enum.reject(fn {_key, value} -> value in [nil, %{}] end)
+      defp choice_source_error?(error) do
+        error
+        |> error_value("code", "")
+        |> to_string()
+        |> String.starts_with?("choice_source_")
       end
 
       defp validation_errors_by(errors, key) do
@@ -1404,6 +1271,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
       defp error_value(error, "field", default), do: map_value(error, :field, Map.get(error, "field", default))
       defp error_value(error, "filter", default), do: map_value(error, :filter, Map.get(error, "filter", default))
       defp error_value(error, "message", default), do: map_value(error, :message, Map.get(error, "message", default))
+      defp error_value(error, "code", default), do: map_value(error, :code, Map.get(error, "code", default))
       defp error_value(error, key, default) when is_map(error), do: Map.get(error, key, default)
 
       defp blank_form_value?(nil), do: true
