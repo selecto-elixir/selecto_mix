@@ -1,6 +1,12 @@
 CHANGES
 =======
 
+Unreleased
+----------
+
+- Relaxed generated installer and README dependency ranges to allow the
+  coordinated 0.5 Selecto release line while preserving current lower bounds.
+
 V 0.4.5
 ----------
 
