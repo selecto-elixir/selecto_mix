@@ -45,18 +45,22 @@ defmodule SelectoMix.StudioArtifactsGenerator do
                Selecto.Domain.normalize(@domain_module.domain()),
              {:ok, inspection, diagnostics} <- Selecto.Domain.describe(normalized) do
           domain = Map.get(normalized, :domain) || Map.get(normalized, "domain") || normalized
+          source =
+            %{
+              "artifact_format" => "selecto.normalized_domain",
+              "artifact_format_version" => @format_version,
+              "domain_module" => inspect(@domain_module),
+              "schema_version" => json_value(Map.get(normalized, :schema_version)),
+              "name" => json_value(map_value(domain, :name))
+            }
+            |> maybe_put("domain_version", json_value(Map.get(normalized, :domain_version)))
+            |> maybe_put("domain_fingerprint", json_value(Map.get(normalized, :domain_fingerprint)))
 
           {:ok,
            %{
              "format" => "selecto.domain_inspection",
              "format_version" => @inspection_format_version,
-             "source" => %{
-               "artifact_format" => "selecto.normalized_domain",
-               "artifact_format_version" => @format_version,
-               "domain_module" => inspect(@domain_module),
-               "schema_version" => json_value(Map.get(normalized, :schema_version)),
-               "name" => json_value(map_value(domain, :name))
-             },
+             "source" => source,
              "inspection" => json_value(inspection),
              "diagnostics" => json_value(diagnostics),
              "links" => %{}
@@ -101,6 +105,9 @@ defmodule SelectoMix.StudioArtifactsGenerator do
 
       defp json_value(value) when is_atom(value), do: atom_value(value)
       defp json_value(value), do: value
+
+      defp maybe_put(map, _key, nil), do: map
+      defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
       defp atom_value(nil), do: nil
       defp atom_value(true), do: true

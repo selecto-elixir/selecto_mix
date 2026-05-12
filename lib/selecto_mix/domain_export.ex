@@ -71,6 +71,10 @@ defmodule SelectoMix.DomainExport do
          artifact: artifact,
          domain_module: Map.get(artifact, "domain_module"),
          schema_version: Map.get(artifact, "schema_version"),
+         domain_version:
+           Map.get(artifact, "domain_version") || Map.get(normalized, :domain_version),
+         domain_fingerprint:
+           Map.get(artifact, "domain_fingerprint") || Map.get(normalized, :domain_fingerprint),
          normalized: normalized,
          diagnostics: diagnostics
        }}
@@ -95,6 +99,9 @@ defmodule SelectoMix.DomainExport do
       format_version: Map.get(artifact, "format_version"),
       domain_module: Map.get(artifact, "domain_module"),
       schema_version: Map.get(artifact, "schema_version"),
+      domain_version: Map.get(artifact, "domain_version") || map_get(domain, "domain_version"),
+      domain_fingerprint:
+        Map.get(artifact, "domain_fingerprint") || map_get(domain, "domain_fingerprint"),
       name: map_get(domain, "name"),
       sections: sections_summary(artifact_diagnostics, current_diagnostics),
       counts: counts_summary(domain),
@@ -256,6 +263,10 @@ defmodule SelectoMix.DomainExport do
   defp artifact(module, normalized, diagnostics) do
     domain = Map.get(normalized, :domain) || Map.get(normalized, "domain") || normalized
     schema_version = Map.get(normalized, :schema_version) || Map.get(normalized, "schema_version")
+    domain_version = Map.get(normalized, :domain_version) || map_get(domain, "domain_version")
+
+    domain_fingerprint =
+      Map.get(normalized, :domain_fingerprint) || map_get(domain, "domain_fingerprint")
 
     %{
       "format" => @format,
@@ -265,6 +276,8 @@ defmodule SelectoMix.DomainExport do
       "domain" => json_value(domain),
       "diagnostics" => json_value(diagnostics)
     }
+    |> maybe_put("domain_version", json_value(domain_version))
+    |> maybe_put("domain_fingerprint", json_value(domain_fingerprint))
   end
 
   defp round_trip_artifact(artifact, normalizer) do
@@ -474,6 +487,9 @@ defmodule SelectoMix.DomainExport do
 
   defp security_writes(_writes), do: nil
 
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
   defp maybe_put_nonempty(map, _key, []), do: map
   defp maybe_put_nonempty(map, key, value), do: Map.put(map, key, value)
 
@@ -564,6 +580,8 @@ defmodule SelectoMix.DomainExport do
       path: Map.get(summary, :path),
       domain_module: Map.get(summary, :domain_module),
       schema_version: Map.get(summary, :schema_version),
+      domain_version: Map.get(summary, :domain_version),
+      domain_fingerprint: Map.get(summary, :domain_fingerprint),
       name: Map.get(summary, :name)
     }
   end

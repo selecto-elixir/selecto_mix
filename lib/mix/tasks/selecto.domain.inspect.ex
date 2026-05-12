@@ -94,6 +94,12 @@ defmodule Mix.Tasks.Selecto.Domain.Inspect do
     Mix.shell().info("Format: #{Map.get(summary, :format)} v#{Map.get(summary, :format_version)}")
     Mix.shell().info("Domain module: #{Map.get(summary, :domain_module) || "(unknown)"}")
     Mix.shell().info("Schema version: #{Map.get(summary, :schema_version) || "(unknown)"}")
+    Mix.shell().info("Domain version: #{Map.get(summary, :domain_version) || "(unversioned)"}")
+
+    Mix.shell().info(
+      "Domain fingerprint: #{Map.get(summary, :domain_fingerprint) || "(unfingerprinted)"}"
+    )
+
     Mix.shell().info("Name: #{Map.get(summary, :name) || "(unnamed)"}")
 
     print_sections(Map.fetch!(summary, :sections))

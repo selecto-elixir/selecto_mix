@@ -124,6 +124,18 @@ defmodule Mix.Tasks.Selecto.Domain.Diff do
       get_in(diff, [:left, :schema_version]),
       get_in(diff, [:right, :schema_version])
     )
+
+    print_value_change(
+      "domain version",
+      get_in(diff, [:left, :domain_version]),
+      get_in(diff, [:right, :domain_version])
+    )
+
+    print_value_change(
+      "domain fingerprint",
+      get_in(diff, [:left, :domain_fingerprint]),
+      get_in(diff, [:right, :domain_fingerprint])
+    )
   end
 
   defp print_sections(sections) do

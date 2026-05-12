@@ -331,6 +331,8 @@ defmodule SelectoMixTest do
       assert is_binary(result)
       assert String.contains?(result, "source:")
       assert String.contains?(result, "schema_version: 1")
+      assert String.contains?(result, "domain_version: \"0.1.0\"")
+      assert String.contains?(result, "# domain_fingerprint: \"sha256:...\"")
       assert String.contains?(result, "source_table: \"tests\"")
       assert String.contains?(result, "primary_key: :id")
       assert String.contains?(result, "functions: %{}")
@@ -729,6 +731,8 @@ defmodule SelectoMixTest do
 
       assert provider_source =~ "Selecto.Domain.normalize(@domain_module.domain())"
       assert provider_source =~ "Selecto.Domain.describe(normalized)"
+      assert provider_source =~ ~s("domain_version")
+      assert provider_source =~ ~s("domain_fingerprint")
       assert Keyword.has_key?(compiled, expected_module)
 
       Igniter.Test.assert_has_notice(igniter, fn notice ->
@@ -746,6 +750,8 @@ defmodule SelectoMixTest do
       assert result =~ "Selecto.Domain.normalize(@domain_module.domain())"
       assert result =~ "Selecto.Domain.describe(normalized)"
       assert result =~ ~s("format" => "selecto.domain_inspection")
+      assert result =~ ~s("domain_version")
+      assert result =~ ~s("domain_fingerprint")
       assert result =~ "Map.from_struct()"
       refute result =~ "SelectoStudio.DomainInspection"
       refute result =~ "SelectoStudioWeb."

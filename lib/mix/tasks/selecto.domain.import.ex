@@ -121,6 +121,12 @@ defmodule Mix.Tasks.Selecto.Domain.Import do
     Mix.shell().info("Mode: check (no files written)")
     Mix.shell().info("Domain module: #{Map.get(source, "domain_module") || "(unknown)"}")
     Mix.shell().info("Schema version: #{Map.get(source, "schema_version") || "(unknown)"}")
+    Mix.shell().info("Domain version: #{Map.get(source, "domain_version") || "(unversioned)"}")
+
+    Mix.shell().info(
+      "Domain fingerprint: #{Map.get(source, "domain_fingerprint") || "(unfingerprinted)"}"
+    )
+
     Mix.shell().info("Name: #{Map.get(source, "name") || "(unnamed)"}")
 
     print_preview(Map.fetch!(plan, "preview"), Map.fetch!(plan, "source_preview"))

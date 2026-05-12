@@ -56,6 +56,12 @@ defmodule Mix.Tasks.Selecto.Domain.Check do
     Mix.shell().info("Format: selecto.normalized_domain v1")
     Mix.shell().info("Domain module: #{Map.get(check, :domain_module) || "(unknown)"}")
     Mix.shell().info("Schema version: #{Map.get(check, :schema_version) || "(unknown)"}")
+    Mix.shell().info("Domain version: #{Map.get(check, :domain_version) || "(unversioned)"}")
+
+    Mix.shell().info(
+      "Domain fingerprint: #{Map.get(check, :domain_fingerprint) || "(unfingerprinted)"}"
+    )
+
     Mix.shell().info("Diagnostics: #{errors} errors, #{warnings} warnings")
   end
 

@@ -95,18 +95,23 @@ defmodule SelectoMix.DomainImport do
     preview = preview(summary, sections, runtime_placeholders, opts)
     source_preview = source_preview(domain, preview, runtime_placeholders)
 
-    %{
-      "format" => @format,
-      "format_version" => @format_version,
-      "mode" => "check",
-      "source" => %{
+    source =
+      %{
         "path" => Map.get(check, :path),
         "artifact_format" => Map.get(artifact, "format"),
         "artifact_format_version" => Map.get(artifact, "format_version"),
         "domain_module" => Map.get(artifact, "domain_module"),
         "schema_version" => Map.get(artifact, "schema_version"),
         "name" => Map.get(summary, :name)
-      },
+      }
+      |> maybe_put("domain_version", Map.get(artifact, "domain_version"))
+      |> maybe_put("domain_fingerprint", Map.get(artifact, "domain_fingerprint"))
+
+    %{
+      "format" => @format,
+      "format_version" => @format_version,
+      "mode" => "check",
+      "source" => source,
       "preview" => preview,
       "source_preview" => source_preview,
       "source_validation" => source_validation(source_preview, runtime_placeholders),
@@ -572,6 +577,9 @@ defmodule SelectoMix.DomainImport do
   end
 
   defp map_get(_map, _key, default), do: default
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp list_or_empty(value) when is_list(value), do: value
   defp list_or_empty(_value), do: []

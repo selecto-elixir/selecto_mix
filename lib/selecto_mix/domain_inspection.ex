@@ -82,17 +82,22 @@ defmodule SelectoMix.DomainInspection do
     summary = DomainExport.summary(check)
     inspection = put_security_review(inspection, Map.get(artifact, "domain", %{}))
 
-    %{
-      "format" => @format,
-      "format_version" => @format_version,
-      "source" => %{
+    source =
+      %{
         "path" => Map.get(check, :path),
         "artifact_format" => Map.get(artifact, "format"),
         "artifact_format_version" => Map.get(artifact, "format_version"),
         "domain_module" => Map.get(artifact, "domain_module"),
         "schema_version" => Map.get(artifact, "schema_version"),
         "name" => Map.get(summary, :name)
-      },
+      }
+      |> maybe_put("domain_version", Map.get(artifact, "domain_version"))
+      |> maybe_put("domain_fingerprint", Map.get(artifact, "domain_fingerprint"))
+
+    %{
+      "format" => @format,
+      "format_version" => @format_version,
+      "source" => source,
       "inspection" => DomainExport.json_safe(inspection),
       "diagnostics" => DomainExport.json_safe(diagnostics)
     }
@@ -174,6 +179,9 @@ defmodule SelectoMix.DomainInspection do
   end
 
   defp security_writes(_writes), do: nil
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp maybe_put_nonempty(map, _key, []), do: map
   defp maybe_put_nonempty(map, key, value), do: Map.put(map, key, value)

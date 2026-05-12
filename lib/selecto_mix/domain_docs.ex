@@ -95,6 +95,11 @@ defmodule SelectoMix.DomainDocs do
       table_row("Format", "#{Map.get(summary, :format)} v#{Map.get(summary, :format_version)}"),
       table_row("Domain module", Map.get(summary, :domain_module) || "(unknown)"),
       table_row("Schema version", Map.get(summary, :schema_version) || "(unknown)"),
+      table_row("Domain version", Map.get(summary, :domain_version) || "(unversioned)"),
+      table_row(
+        "Domain fingerprint",
+        Map.get(summary, :domain_fingerprint) || "(unfingerprinted)"
+      ),
       ""
     ]
   end

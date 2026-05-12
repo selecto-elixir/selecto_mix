@@ -161,6 +161,10 @@ defmodule SelectoMix.DomainGenerator do
     "%{\n      # Generated from: #{generated_from}\n" <>
       "      # Canonical Selecto domain schema version\n" <>
       "      schema_version: 1,\n      \n" <>
+      "      # Authored domain version; update when this domain contract changes meaning\n" <>
+      "      domain_version: \"0.1.0\",\n      \n" <>
+      "      # Optional content fingerprint; populate from a stable artifact hash when available\n" <>
+      "      # domain_fingerprint: \"sha256:...\",\n      \n" <>
       "      source: #{generate_source_config(config)},\n" <>
       "      schemas: #{generate_schemas_config(config)},\n" <>
       "      name: #{generate_domain_name(config)},\n      \n" <>

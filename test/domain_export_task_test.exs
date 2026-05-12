@@ -35,8 +35,18 @@ unless Code.ensure_loaded?(Selecto.Domain) do
   defmodule Selecto.Domain do
     def normalize(domain) when is_map(domain) do
       schema_version = Map.get(domain, :schema_version) || Map.get(domain, "schema_version") || 1
+      domain_version = Map.get(domain, :domain_version) || Map.get(domain, "domain_version")
 
-      {:ok, %{schema_version: schema_version, domain: domain},
+      domain_fingerprint =
+        Map.get(domain, :domain_fingerprint) || Map.get(domain, "domain_fingerprint")
+
+      {:ok,
+       %{
+         schema_version: schema_version,
+         domain_version: domain_version,
+         domain_fingerprint: domain_fingerprint,
+         domain: domain
+       },
        %{
          errors: [],
          warnings: [],
@@ -54,6 +64,11 @@ unless Code.ensure_loaded?(Selecto.Domain) do
     end
 
     def describe(%{schema_version: schema_version, domain: domain}) when is_map(domain) do
+      domain_version = Map.get(domain, :domain_version) || Map.get(domain, "domain_version")
+
+      domain_fingerprint =
+        Map.get(domain, :domain_fingerprint) || Map.get(domain, "domain_fingerprint")
+
       source = map_get(domain, "source", %{})
       filters = map_get(domain, "filters", %{})
       functions = map_get(domain, "functions", %{})
@@ -64,6 +79,8 @@ unless Code.ensure_loaded?(Selecto.Domain) do
       {:ok,
        %{
          schema_version: schema_version,
+         domain_version: domain_version,
+         domain_fingerprint: domain_fingerprint,
          name: map_get(domain, "name"),
          sections: %{
            canonical: [:source, :schemas, :joins, :filters, :functions, :published_views],
@@ -201,6 +218,8 @@ defmodule SelectoMix.DomainExportTaskTest do
     def domain do
       %{
         schema_version: 1,
+        domain_version: "0.5.0",
+        domain_fingerprint: "sha256:demo",
         name: "Demo Items",
         source: %{
           source_table: "demo_items",
@@ -258,6 +277,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       |> put_in([:source, :columns, :name, :capability], "item.name")
       |> Map.merge(%{
         name: "Capability Items",
+        domain_fingerprint: "sha256:capability",
         filters: %{name: %{type: :string, capability: "item.filter"}},
         functions: %{name_lower: %{kind: :scalar, capability: "item.rank"}},
         query_members: %{
@@ -316,6 +336,10 @@ defmodule SelectoMix.DomainExportTaskTest do
     assert artifact["format_version"] == 1
     assert artifact["domain_module"] == inspect(DemoDomain)
     assert artifact["schema_version"] == 1
+    assert artifact["domain_version"] == "0.5.0"
+    assert artifact["domain_fingerprint"] == "sha256:demo"
+    assert artifact["domain"]["domain_version"] == "0.5.0"
+    assert artifact["domain"]["domain_fingerprint"] == "sha256:demo"
     assert artifact["diagnostics"]["errors"] == []
     assert artifact["domain"]["source"]["primary_key"] == "id"
     assert artifact["domain"]["source"]["fields"] == ["id", "name"]
@@ -364,6 +388,8 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert output =~ "Format: selecto.normalized_domain v1"
       assert output =~ "Domain module: #{inspect(DemoDomain)}"
       assert output =~ "Schema version: 1"
+      assert output =~ "Domain version: 0.5.0"
+      assert output =~ "Domain fingerprint: sha256:demo"
       assert output =~ "Diagnostics: 0 errors, 0 warnings"
     end)
   end
@@ -819,6 +845,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       docs = File.read!("docs/selecto/capability.md")
 
       assert docs =~ "# Capability Items"
+      assert docs =~ "| Domain fingerprint | sha256:capability |"
       assert docs =~ "## Choice Source Details"
       assert docs =~ "| owner_choices | users | id | name | domain_of_interest=fail_closed |"
       assert docs =~ "## Security Review"
@@ -878,7 +905,11 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert inspection["source"]["path"] == "demo.normalized.json"
       assert inspection["source"]["domain_module"] == inspect(DemoDomain)
       assert inspection["source"]["name"] == "Demo Items"
+      assert inspection["source"]["domain_version"] == "0.5.0"
+      assert inspection["source"]["domain_fingerprint"] == "sha256:demo"
       assert inspection["inspection"]["name"] == "Demo Items"
+      assert inspection["inspection"]["domain_version"] == "0.5.0"
+      assert inspection["inspection"]["domain_fingerprint"] == "sha256:demo"
       assert inspection["inspection"]["counts"]["source_fields"] == 2
       assert inspection["inspection"]["counts"]["filters"] == 1
       assert inspection["inspection"]["registries"]["filters"] == ["name"]
@@ -983,10 +1014,14 @@ defmodule SelectoMix.DomainExportTaskTest do
           "path" => "demo.normalized.json",
           "domain_module" => inspect(DemoDomain),
           "schema_version" => 1,
+          "domain_version" => "0.5.0",
+          "domain_fingerprint" => "sha256:demo",
           "name" => "Demo Items"
         },
         "inspection" => %{
           "schema_version" => 1,
+          "domain_version" => "0.5.0",
+          "domain_fingerprint" => "sha256:demo",
           "name" => "Demo Items",
           "registries" => %{
             "source_fields" => ["customer_id", "id", "status"]
@@ -1065,7 +1100,7 @@ defmodule SelectoMix.DomainExportTaskTest do
       diagram = File.read!("docs/selecto/demo.diagram.mmd")
 
       assert diagram =~ "flowchart LR"
-      assert diagram =~ "Domain: Demo Items\\nschema v1"
+      assert diagram =~ "Domain: Demo Items\\nschema v1\\ndomain 0.5.0\\nfingerprint sha256:demo"
       assert diagram =~ "Source relationship: customer"
       assert diagram =~ "customer_id -> id"
       assert diagram =~ "Choice source: customer_choices"
@@ -1261,6 +1296,8 @@ defmodule SelectoMix.DomainExportTaskTest do
 
       assert check_output =~ "Checked normalized domain JSON: generated.normalized.json"
       assert check_output =~ "Schema version: 1"
+      assert check_output =~ "Domain version: 0.1.0"
+      assert check_output =~ "Domain fingerprint: (unfingerprinted)"
 
       import_output =
         capture_io(fn ->
@@ -1268,6 +1305,8 @@ defmodule SelectoMix.DomainExportTaskTest do
         end)
 
       assert import_output =~ "Checked normalized domain import plan: generated.normalized.json"
+      assert import_output =~ "Domain version: 0.1.0"
+      assert import_output =~ "Domain fingerprint: (unfingerprinted)"
       assert import_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
       assert import_output =~ "Generated-domain preview:"
       assert import_output =~ "target module: #{inspect(domain_module)}"
@@ -1279,6 +1318,8 @@ defmodule SelectoMix.DomainExportTaskTest do
         end)
 
       assert inspect_output =~ "Name: GeneratedRoundTrip#{suffix} Domain"
+      assert inspect_output =~ "Domain version: 0.1.0"
+      assert inspect_output =~ "Domain fingerprint: (unfingerprinted)"
       assert inspect_output =~ "source fields: 3"
       assert inspect_output =~ "filters: status"
 

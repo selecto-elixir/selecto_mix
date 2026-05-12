@@ -295,8 +295,17 @@ defmodule SelectoMix.DomainDiagram do
   defp domain_label(source, inspection) do
     name = map_get(source, "name") || map_get(inspection, "name") || "Selecto Domain"
     schema_version = map_get(source, "schema_version") || map_get(inspection, "schema_version")
+    domain_version = map_get(source, "domain_version") || map_get(inspection, "domain_version")
 
-    ["Domain: #{name}", schema_version && "schema v#{schema_version}"]
+    domain_fingerprint =
+      map_get(source, "domain_fingerprint") || map_get(inspection, "domain_fingerprint")
+
+    [
+      "Domain: #{name}",
+      schema_version && "schema v#{schema_version}",
+      domain_version && "domain #{domain_version}",
+      domain_fingerprint && "fingerprint #{domain_fingerprint}"
+    ]
     |> compact_join()
   end
 
