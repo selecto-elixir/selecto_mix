@@ -448,6 +448,44 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "tag_foreign_key: \"tag_id\"")
     end
 
+    test "generate_domain_map/1 deduplicates schema entries for self-referential associations" do
+      config = %{
+        schema_module: TestSchema,
+        table_name: "employees",
+        primary_key: :id,
+        fields: [:id, :name],
+        field_types: %{id: :integer, name: :string},
+        associations: %{
+          manager: %{
+            related_schema: "Employee",
+            related_module_name: "Employee",
+            related_table: "employees",
+            queryable: :employee,
+            owner_key: :manager_id,
+            related_key: :id
+          },
+          subordinates: %{
+            related_schema: "Employee",
+            related_module_name: "Employee",
+            related_table: "employees",
+            queryable: :employee,
+            owner_key: :id,
+            related_key: :manager_id
+          }
+        },
+        suggested_defaults: %{
+          default_selected: [:name],
+          default_filters: %{},
+          default_order: []
+        },
+        metadata: %{module_name: "Employee"}
+      }
+
+      result = DomainGenerator.generate_domain_map(config)
+
+      assert length(Regex.scan(~r/:employee => %\{/, result)) == 1
+    end
+
     test "generate_domain_file/3 creates DB-backed helper functions" do
       source = {:db, SelectoDBPostgreSQL.Adapter, :fake_conn, "products", schema: "public"}
 
