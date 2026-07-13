@@ -173,6 +173,7 @@ defmodule SelectoMix.SchemaDiscovery do
   end
 
   def parse_expand_schemas(_), do: []
+
   @mode_types %{
     expand_tag: :tag,
     expand_star: :star,

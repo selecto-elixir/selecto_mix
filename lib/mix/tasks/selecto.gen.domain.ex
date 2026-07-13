@@ -442,7 +442,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     domain_file = DomainPaths.domain_file_path(output_dir, source)
     opts_list = Map.to_list(opts)
 
-    case SelectoMix.SchemaIntrospector.introspect_schema(source, opts_list) do
+    case SelectoMix.SchemaIntrospector.introspect_schema_result(source, opts_list) do
       {:error, reason} ->
         Igniter.add_issue(
           igniter,
@@ -681,7 +681,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
             if related_schema && Code.ensure_loaded?(related_schema) do
               # Introspect the related schema
-              case SelectoMix.SchemaIntrospector.introspect_schema(related_schema, []) do
+              case SelectoMix.SchemaIntrospector.introspect_schema_result(related_schema, []) do
                 {:ok, related_config} ->
                   # Build expanded schema config
                   # We don't include associations in expanded schemas to avoid complexity

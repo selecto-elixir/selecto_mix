@@ -44,6 +44,7 @@ defmodule SelectoMix.DomainGenerator.MapBuilder do
 
   defp generate_source_config(config) do
     primary_key = config[:primary_key] || :id
+
     table_name =
       config[:table_name] ||
         raise(ArgumentError, "domain config is missing :table_name")

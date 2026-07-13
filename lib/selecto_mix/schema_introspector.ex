@@ -10,11 +10,11 @@ defmodule SelectoMix.SchemaIntrospector do
   ## Usage
 
       # Ecto schema (original interface - still works)
-      {:ok, config} = SelectoMix.SchemaIntrospector.introspect_schema(MyApp.User)
+      config = SelectoMix.SchemaIntrospector.introspect_schema(MyApp.User)
 
       # Postgrex connection (new interface)
       {:ok, conn} = Postgrex.start_link(...)
-      {:ok, config} = SelectoMix.SchemaIntrospector.introspect_schema(
+      config = SelectoMix.SchemaIntrospector.introspect_schema(
         {:postgrex, conn, "users"}
       )
   """
@@ -40,7 +40,7 @@ defmodule SelectoMix.SchemaIntrospector do
 
   ## Returns
 
-  - `{:ok, config}` where `config` is a map containing:
+  A configuration map containing:
     - `:schema_module` - The source module or table name
     - `:table_name` - Database table name
     - `:primary_key` - Primary key field name
@@ -49,10 +49,27 @@ defmodule SelectoMix.SchemaIntrospector do
     - `:associations` - Association metadata for joins
     - `:suggested_defaults` - Recommended default configuration
     - `:redacted_fields` - Fields that should be excluded from queries
-  - `{:error, reason}` if the source could not be introspected
+  On failure, the map contains `:error` and `:schema_module`, matching the
+  original public API. Use `introspect_schema_result/2` when tagged tuples are
+  preferable.
   """
-  @spec introspect_schema(term(), keyword()) :: {:ok, map()} | {:error, term()}
+  @spec introspect_schema(term(), keyword()) :: map()
   def introspect_schema(source, opts \\ []) do
+    case introspect_schema_result(source, opts) do
+      {:ok, config} -> config
+      {:error, reason} -> %{error: reason, schema_module: source}
+    end
+  end
+
+  @doc """
+  Introspects a schema while preserving success and failure as tagged tuples.
+
+  Use this at task boundaries that need to stop generation on an introspection
+  failure. `introspect_schema/2` retains the package's original map-returning
+  API for backward compatibility.
+  """
+  @spec introspect_schema_result(term(), keyword()) :: {:ok, map()} | {:error, String.t()}
+  def introspect_schema_result(source, opts \\ []) do
     include_associations = Keyword.get(opts, :include_associations, true)
     redact_fields = Keyword.get(opts, :redact_fields, [])
 
@@ -103,7 +120,7 @@ defmodule SelectoMix.SchemaIntrospector do
   """
   @spec introspect_schema!(term(), keyword()) :: map()
   def introspect_schema!(source, opts \\ []) do
-    case introspect_schema(source, opts) do
+    case introspect_schema_result(source, opts) do
       {:ok, config} -> config
       {:error, reason} -> Mix.raise(to_string(reason))
     end

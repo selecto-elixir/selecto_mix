@@ -273,7 +273,9 @@ defmodule SelectoMixTest do
 
     test "introspect_schema/2 handles missing schema gracefully" do
       # This would fail with a real schema module, but shows error handling
-      assert {:error, reason} = SchemaIntrospector.introspect_schema(NonExistentSchema, [])
+      assert %{error: reason, schema_module: NonExistentSchema} =
+               SchemaIntrospector.introspect_schema(NonExistentSchema, [])
+
       assert reason =~ "Failed to introspect schema"
     end
 
@@ -302,7 +304,7 @@ defmodule SelectoMixTest do
     end
 
     test "preserves binary_id and uuid column metadata" do
-      assert {:ok, config} = SchemaIntrospector.introspect_schema(UuidSchema, [])
+      config = SchemaIntrospector.introspect_schema(UuidSchema, [])
 
       assert config.primary_key == :public_id
       assert config.field_types.public_id == :binary_id
@@ -676,7 +678,10 @@ defmodule SelectoMixTest do
       source = {:db, SelectoDBMSSQL.Adapter, :fake_conn, "orders", schema: "sales"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema(source, schema: "sales", include_associations: true)
+        SchemaIntrospector.introspect_schema_result(source,
+          schema: "sales",
+          include_associations: true
+        )
 
       assert config.table_name == "orders"
       assert config.primary_key == :id
@@ -697,7 +702,10 @@ defmodule SelectoMixTest do
       source = {:db, SelectoDBSQLite.Adapter, :fake_conn, "orders", schema: "public"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema(source, schema: "public", include_associations: true)
+        SchemaIntrospector.introspect_schema_result(source,
+          schema: "public",
+          include_associations: true
+        )
 
       assert config.table_name == "orders"
       assert config.primary_key == :id
@@ -716,7 +724,7 @@ defmodule SelectoMixTest do
       source = {:db, SelectoDBMySQL.Adapter, :fake_conn, "orders", schema: "shop_dev"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema(source,
+        SchemaIntrospector.introspect_schema_result(source,
           schema: "shop_dev",
           include_associations: true
         )
@@ -738,7 +746,7 @@ defmodule SelectoMixTest do
       source = {:db, SelectoDBMariaDB.Adapter, :fake_conn, "orders", schema: "shop_dev"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema(source,
+        SchemaIntrospector.introspect_schema_result(source,
           schema: "shop_dev",
           include_associations: true
         )
@@ -762,7 +770,7 @@ defmodule SelectoMixTest do
          schema: "reporting", source_kind: :view, primary_key: :customer_id}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema(source,
+        SchemaIntrospector.introspect_schema_result(source,
           schema: "reporting",
           source_kind: :view,
           primary_key: :customer_id,
