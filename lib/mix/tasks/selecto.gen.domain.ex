@@ -936,7 +936,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   defp output_app_name(opts) do
-    (opts[:app_name] || Application.get_env(:selecto_mix, :app_name, "my_app"))
+    (opts[:app_name] || Keyword.get(SelectoMix.config(), :app_name, "my_app"))
     |> to_string()
     |> Macro.underscore()
   end

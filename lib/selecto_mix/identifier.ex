@@ -4,6 +4,8 @@ defmodule SelectoMix.Identifier do
   @elixir_identifier_regex ~r/^[A-Za-z_][A-Za-z0-9_]*$/
   @sql_identifier_regex ~r/^[A-Za-z_][A-Za-z0-9_]*$/
   @max_sql_identifier_bytes 63
+  @counter_key {__MODULE__, :dynamic_identifier_counter}
+  @max_dynamic_identifiers 10_000
 
   @doc """
   Returns true if `name` is a syntactically valid Elixir identifier
@@ -62,7 +64,7 @@ defmodule SelectoMix.Identifier do
   end
 
   @doc """
-  Converts a DB/CLI-derived value to an atom, validating it first.
+  Converts a DB/CLI-derived value to an atom, validating and globally bounding it first.
 
   Atoms pass through unchanged. Binaries are validated as safe SQL
   identifiers before being converted with `String.to_atom/1`. Anything else
@@ -74,7 +76,7 @@ defmodule SelectoMix.Identifier do
   def to_atom!(value) when is_binary(value) do
     value
     |> validate_sql_identifier!()
-    |> String.to_atom()
+    |> intern_atom!()
   end
 
   def to_atom!(value) do
@@ -90,10 +92,51 @@ defmodule SelectoMix.Identifier do
 
   def to_atom(value) when is_binary(value) do
     case validate_sql_identifier(value) do
-      {:ok, valid} -> {:ok, String.to_atom(valid)}
+      {:ok, valid} -> {:ok, intern_atom!(valid)}
       {:error, reason} -> {:error, reason}
     end
   end
 
   def to_atom(value), do: {:error, "cannot convert #{inspect(value)} to an atom identifier"}
+
+  defp intern_atom!(value) do
+    try do
+      String.to_existing_atom(value)
+    rescue
+      ArgumentError ->
+        :global.trans({__MODULE__, :atom_interning}, fn ->
+          try do
+            String.to_existing_atom(value)
+          rescue
+            ArgumentError -> create_bounded_atom!(value)
+          end
+        end)
+    end
+  end
+
+  defp create_bounded_atom!(value) do
+    counter = ensure_counter!()
+    count = :atomics.add_get(counter, 1, 1)
+
+    if count <= @max_dynamic_identifiers do
+      String.to_atom(value)
+    else
+      :atomics.sub_get(counter, 1, 1)
+
+      raise ArgumentError,
+            "runtime identifier atom limit of #{@max_dynamic_identifiers} has been reached"
+    end
+  end
+
+  defp ensure_counter! do
+    case :persistent_term.get(@counter_key, nil) do
+      nil ->
+        counter = :atomics.new(1, signed: false)
+        :persistent_term.put(@counter_key, counter)
+        counter
+
+      counter ->
+        counter
+    end
+  end
 end

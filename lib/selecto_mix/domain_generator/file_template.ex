@@ -145,7 +145,7 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
     # KEY FIX: Use schema module
     app_name =
       opts[:app_name] ||
-        Application.get_env(:selecto_mix, :app_name) ||
+        Keyword.get(SelectoMix.config(), :app_name) ||
         infer_app_name_from_schema(schema_module) ||
         "MyApp"
 

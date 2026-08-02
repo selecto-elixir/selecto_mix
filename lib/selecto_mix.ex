@@ -60,11 +60,17 @@ defmodule SelectoMix do
 
   ## Configuration
 
-  You can configure SelectoMix in your `config/config.exs`:
+  You can configure SelectoMix in your project's `mix.exs`:
 
-      config :selecto_mix,
-        output_dir: "lib/my_app/selecto_domains",
-        default_associations: true
+      def project do
+        [
+          # ...
+          selecto_mix: [
+            output_dir: "lib/my_app/selecto_domains",
+            default_associations: true
+          ]
+        ]
+      end
 
   ## Example Usage
 
@@ -92,7 +98,8 @@ defmodule SelectoMix do
   Get configuration for SelectoMix.
   """
   def config do
-    Application.get_all_env(:selecto_mix)
+    Mix.Project.config()
+    |> Keyword.get(:selecto_mix, [])
   end
 
   @doc """
@@ -107,9 +114,9 @@ defmodule SelectoMix do
   Get the default output directory for generated domains.
   """
   def default_output_dir do
-    case Application.get_env(:selecto_mix, :output_dir) do
+    case Keyword.get(config(), :output_dir) do
       nil ->
-        app_name = Application.get_env(:selecto_mix, :app_name, "my_app")
+        app_name = Keyword.get(config(), :app_name, "my_app")
         "lib/#{app_name}/selecto_domains"
 
       dir ->

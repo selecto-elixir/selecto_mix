@@ -1,8 +1,16 @@
 CHANGES
 =======
 
-V NEXT
+V 0.4.8
 ----------
+
+- Bounded runtime atom creation for validated database and CLI identifiers to
+  10,000 new identifiers for the lifetime of the VM.
+- Moved SelectoMix generator configuration from global application environment
+  state to the consuming project's `mix.exs` `:selecto_mix` project option.
+- Updated generated dependency baselines for Selecto `0.4.9`, the PostgreSQL
+  adapter `0.4.6`, and Components `0.4.10`.
+- Bump package version to `0.4.8`.
 
 V 0.4.7
 ----------
