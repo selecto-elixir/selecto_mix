@@ -159,8 +159,15 @@ non-executing query intent validator.
 Generate an Updato API endpoint and control panel:
 
 ```bash
-mix selecto.gen.api products --domain MyApp.SelectoDomains.ProductDomain --schema MyApp.Catalog.Product
+mix selecto.gen.api products \
+  --domain MyApp.SelectoDomains.ProductDomain \
+  --connection MyApp.SelectoPostgreSQL
 ```
+
+Generated reads use the named connection. Generated writes fail closed until
+`api_config/1` or the control-panel socket provides a server-owned
+`%Selecto{}` configured with `SelectoDBPostgreSQL.Adapter`. No Ecto schema,
+Repo target, or `:ecto_repos` configuration is required for the write path.
 
 Generated Updato control panels can render write fields backed by Selecto
 `choice_sources`. To enable option loading and membership validation, assign

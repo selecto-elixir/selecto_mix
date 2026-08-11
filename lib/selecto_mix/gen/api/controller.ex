@@ -105,6 +105,14 @@ defmodule SelectoMix.Gen.Api.Controller do
       defp authorize_api_request(_conn, _action), do: :ok
 
       defp api_config(_conn) do
+        # Configure this with a server-owned %Selecto{} whose adapter
+        # implements Selecto.DB.WriteAdapter, for example:
+        #
+        #   #{config.name_module}Api.default_config()
+        #   |> Map.put(:write_selecto, MyApp.Selecto.write_target())
+        #
+        # The generated default is nil so writes fail closed. No Ecto Repo is
+        # used as a write target.
         #{config.name_module}Api.default_config()
       end
 

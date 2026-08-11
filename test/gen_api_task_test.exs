@@ -13,10 +13,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
             "orders",
             "--domain",
             "Shop.SelectoDomains.OrderDomain",
-            "--schema",
-            "Shop.Orders.Order",
-            "--repo",
-            "Shop.Repo",
+            "--connection",
+            "Shop.SelectoPostgreSQL",
             "--api-path",
             "/api/v1/updato/orders",
             "--panel-path",
@@ -27,6 +25,10 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       api_module = File.read!("lib/selecto_mix/updato_api/orders_api.ex")
       controller = File.read!("lib/selecto_mix_web/controllers/orders_api_controller.ex")
       control_panel = File.read!("lib/selecto_mix_web/live/orders_api_control_panel_live.ex")
+
+      assert {:ok, _} = Code.string_to_quoted(api_module)
+      assert {:ok, _} = Code.string_to_quoted(controller)
+      assert {:ok, _} = Code.string_to_quoted(control_panel)
 
       assert api_module =~ "alias SelectoUpdato.DomainContract"
       assert api_module =~ "def choice_source_domain(config"
@@ -63,8 +65,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "defp operation_options(config)"
       assert api_module =~ "choice_source_domain: map_value(config, :choice_source_domain)"
       assert api_module =~ "choice_source_filters: map_value(config, :choice_source_filters"
-      assert api_module =~ "choice_source_record: map_value(config, :choice_source_record"
-      assert api_module =~ "choice_source_metadata: map_value(config, :choice_source_metadata"
+      refute api_module =~ "choice_source_record: map_value(config, :choice_source_record"
+      refute api_module =~ "choice_source_metadata: map_value(config, :choice_source_metadata"
       assert api_module =~ "choice_source: Map.get(field, \"choice_source\")"
       assert api_module =~ "choice_source: Map.get(config, :choice_source)"
       assert api_module =~ "defp sample_template_value(%{} = config)"
@@ -72,6 +74,20 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "choice_source_filters"
       assert api_module =~ "value when is_atom(value) -> not is_nil(value)"
       assert api_module =~ "|> DomainContract.json_document(opts)"
+      assert api_module =~ "write_selecto: nil"
+      assert api_module =~ "defp configured_write_selecto(config)"
+      assert api_module =~ "code: :configured_selecto_required"
+
+      assert api_module =~
+               "SelectoUpdato.execute(operation, write_selecto, write_execution_opts(config))"
+
+      refute api_module =~ "SelectoUpdato.execute(operation, config.repo)"
+      refute api_module =~ "SelectoUpdato.confirm_bulk_delete"
+      refute api_module =~ "confirm_bulk_delete"
+      refute api_module =~ "soft_delete"
+      refute api_module =~ "insert_from_query"
+      refute api_module =~ "insert_all"
+      refute api_module =~ "upsert_all"
 
       assert controller =~ "write_contract: write_contract"
       assert controller =~ "capabilities: OrderApi.write_contract_summary()"
@@ -81,6 +97,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert controller =~ "def apply_action(conn, %{\"action\" => action} = params)"
       assert controller =~ "OrderApi.apply_domain_action(action, params, api_config(conn))"
       assert controller =~ "defp api_config(_conn)"
+      assert controller =~ "Map.put(:write_selecto, MyApp.Selecto.write_target())"
+      assert controller =~ "No Ecto Repo is"
       assert api_module =~ "authorize_query_intent(query_params, config)"
       assert api_module =~ "validate_query_capabilities(params, config)"
       assert api_module =~ "Module.concat([SelectoComponents, QueryContract])"
@@ -138,6 +156,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
 
       assert control_panel =~ "choice_source_domain: OrderApi.choice_source_domain()"
       assert control_panel =~ "write_api_config(socket)"
+      assert control_panel =~ "write_selecto: socket.assigns.write_selecto"
+      assert control_panel =~ "writes fail closed"
       assert control_panel =~ ~s(data-choice-source-id={field["choice_source"]})
       assert control_panel =~ ~s(<.choice_source_filter_input)
       assert control_panel =~ ~s(input_name={"write_form[fields][\#{field["id"]}]"})
@@ -170,6 +190,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
 
       assert output =~ "require_capability_resolver: true"
       assert output =~ "capability-declared actions and query requests must fail closed"
+      assert output =~ "server-owned %Selecto{} write target"
+      assert output =~ "writes never execute through the read connection"
     end)
   end
 

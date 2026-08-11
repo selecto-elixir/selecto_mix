@@ -59,6 +59,8 @@ defmodule SelectoMix.Gen.Api.RouterNotice do
       5. If the generated controller accepts choice-backed writes, customize api_config/1 with the same server-owned membership resolver and secure scope.
       6. If you expose action preview/apply or query endpoints, customize authorize_api_request/2 and api_config/1 so actor, tenant, capability_resolver, and trusted action filters come from conn/session state, not browser parameters.
          Set require_capability_resolver: true when capability-declared actions and query requests must fail closed without a resolver.
+      7. Configure api_config/1 and the control panel with a server-owned %Selecto{} write target using SelectoDBPostgreSQL.Adapter.
+         The generated nil default fails closed; writes never execute through the read connection or require Ecto configuration.
     """)
   end
 end

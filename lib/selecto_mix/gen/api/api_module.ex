@@ -12,8 +12,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
           %{
             "action" => "insert" | "update" | "upsert" | "delete",
             "attributes" => map(),
-            "filters" => [ [field, value] | %{\"field\" => field, \"value\" => value} ],
-            "confirm_bulk_delete" => boolean()
+            "filters" => [ [field, value] | %{\"field\" => field, \"value\" => value} ]
           }
 
       Expected read payload:
@@ -39,8 +38,8 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         api_path: "#{config.api_path}",
         panel_path: "#{config.panel_path}",
         domain_module: #{config.domain_module},
-        schema_module: #{config.schema_module},
-        repo: #{config.repo_module}
+        read_connection: #{config.read_connection_module},
+        write_selecto: nil
       }
 
       def default_config, do: @default_config
@@ -167,7 +166,6 @@ defmodule SelectoMix.Gen.Api.ApiModule do
           operation,
           form_attribute_values(map_value(form_config, :fields, []), fields)
         )
-        |> maybe_put_confirm_bulk_delete(operation)
         |> DomainContract.json_safe()
       end
 
@@ -198,7 +196,9 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         with :ok <- validate_write_params(params),
              :ok <- validate_choice_source_params(params, config),
              {:ok, operation} <- build_operation(params, config),
-             {:ok, result} <- SelectoUpdato.execute(operation, config.repo) do
+             {:ok, write_selecto} <- configured_write_selecto(config),
+             {:ok, result} <-
+               SelectoUpdato.execute(operation, write_selecto, write_execution_opts(config)) do
           {:ok, %{result: result, action: Map.get(params, "action", "insert")}}
         end
       end
@@ -247,6 +247,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
           |> SelectoUpdato.new(operation_options(config))
           |> apply_filters(filters)
           |> apply_action(action, attributes, params)
+          |> maybe_set_returning(Map.get(params, "returning"))
 
         {:ok, operation}
       rescue
@@ -364,15 +365,16 @@ defmodule SelectoMix.Gen.Api.ApiModule do
             with :ok <- authorize_action_plan(plan, action_phase(params), context, config),
                  :ok <- ensure_action_dry_run_supported(params),
                  :ok <- ensure_action_apply_supported(plan),
-                 {:ok, operation} <- operation_from_action_plan(plan, config) do
-              SelectoUpdato.execute(operation, config.repo)
+                 {:ok, operation} <- operation_from_action_plan(plan, config),
+                 {:ok, write_selecto} <- configured_write_selecto(config) do
+              SelectoUpdato.execute(operation, write_selecto, write_execution_opts(config))
             end
         end
       end
 
       defp action_execution_context(params, config) do
         %{
-          repo: map_value(config, :repo),
+          write_selecto: map_value(config, :write_selecto),
           params: params,
           contract_domain: contract_domain(config),
           write_domain: domain_for_write(config)
@@ -453,21 +455,51 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         scope = map_value(config, :choice_source_scope, %{})
 
         [
-          actor:
-            map_value(config, :actor, map_value(config, :choice_source_actor, map_value(scope, :actor))),
           tenant:
             map_value(config, :tenant, map_value(config, :choice_source_tenant, map_value(scope, :tenant))),
           choice_source_domain: map_value(config, :choice_source_domain),
           choice_source_membership_resolver: map_value(config, :choice_source_membership_resolver),
           choice_source_context: map_value(config, :choice_source_context, map_value(scope, :context, %{})),
-          choice_source_filters: map_value(config, :choice_source_filters, map_value(scope, :filters, [])),
-          choice_source_record: map_value(config, :choice_source_record, map_value(scope, :record)),
-          choice_source_metadata: map_value(config, :choice_source_metadata, map_value(scope, :metadata, %{}))
+          choice_source_filters: map_value(config, :choice_source_filters, map_value(scope, :filters, []))
         ]
         |> Enum.reject(fn
           {:choice_source_membership_resolver, resolver} -> not is_function(resolver, 1)
           {_key, value} -> value in [nil, %{}, []]
         end)
+      end
+
+      defp configured_write_selecto(config) do
+        case map_value(config, :write_selecto) do
+          %Selecto{} = selecto ->
+            {:ok, selecto}
+
+          fun when is_function(fun, 0) ->
+            case fun.() do
+              %Selecto{} = selecto -> {:ok, selecto}
+              other -> invalid_write_selecto(other)
+            end
+
+          other ->
+            invalid_write_selecto(other)
+        end
+      end
+
+      defp invalid_write_selecto(actual) do
+        {:error,
+         {:validation_error,
+          "Write execution requires api_config/1 to provide a configured Selecto value.",
+          DomainContract.json_safe(%{
+            code: :configured_selecto_required,
+            actual: inspect(actual)
+          })}}
+      end
+
+      defp write_execution_opts(config) do
+        context =
+          map_value(config, :write_context, %{})
+          |> maybe_put(:actor, map_value(config, :actor))
+
+        if context == %{}, do: [], else: [context: context]
       end
 
       defp operation_from_action_plan(plan, config) do
@@ -568,7 +600,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
         selecto =
           domain
-          |> Selecto.configure(config.repo)
+          |> Selecto.configure(config.read_connection)
           |> maybe_select(Map.get(params, "select"))
           |> apply_query_filters(normalize_filters(Map.get(params, "filters", [])))
           |> apply_order_by(normalize_order_by(Map.get(params, "order_by", [])), config)
@@ -600,10 +632,6 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
           action in ["insert", "update", "upsert"] and not is_map(Map.get(params, "attributes", %{})) ->
             {:error, {:validation_error, "attributes must be a map for insert/update/upsert"}}
-
-          action == "delete" and Map.has_key?(params, "confirm_bulk_delete") and
-              not is_boolean(Map.get(params, "confirm_bulk_delete")) ->
-            {:error, {:validation_error, "confirm_bulk_delete must be a boolean"}}
 
           Map.has_key?(params, "filters") and not is_list(Map.get(params, "filters")) ->
             {:error, {:validation_error, "filters must be a list"}}
@@ -663,24 +691,20 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         end
       end
 
-      defp apply_action(operation, "delete", _attributes, params) do
-        operation = SelectoUpdato.delete(operation)
-
-        if Map.get(params, "confirm_bulk_delete", false) do
-          SelectoUpdato.confirm_bulk_delete(operation, true)
-        else
-          operation
-        end
-      end
+      defp apply_action(operation, "delete", _attributes, _params),
+        do: SelectoUpdato.delete(operation)
 
       defp apply_action(operation, _action, attributes, _params),
         do: SelectoUpdato.insert(operation, attributes)
 
       defp maybe_set_returning(operation, nil), do: operation
       defp maybe_set_returning(operation, []), do: operation
-      defp maybe_set_returning(operation, "record"), do: SelectoUpdato.returning(operation, :record)
-      defp maybe_set_returning(operation, "records"), do: SelectoUpdato.returning(operation, :records)
-      defp maybe_set_returning(operation, "count"), do: SelectoUpdato.returning(operation, :count)
+      defp maybe_set_returning(operation, value) when value in ["record", "records", :record, :records],
+        do: SelectoUpdato.returning(operation, :all)
+
+      defp maybe_set_returning(operation, value) when value in ["count", :count],
+        do: SelectoUpdato.returning(operation, :none)
+
       defp maybe_set_returning(operation, "none"), do: SelectoUpdato.returning(operation, :none)
       defp maybe_set_returning(operation, returning), do: SelectoUpdato.returning(operation, returning)
 
@@ -978,30 +1002,23 @@ defmodule SelectoMix.Gen.Api.ApiModule do
       defp build_write_template(operation, summary) do
         %{action: operation, filters: default_template_filters(operation)}
         |> maybe_put_template_attributes(operation, template_attributes(operation, summary.fields))
-        |> maybe_put_confirm_bulk_delete(operation)
       end
 
       defp default_template_filters(operation)
-           when operation in ["update", "upsert", "delete", "soft_delete"] do
+           when operation in ["update", "upsert", "delete"] do
         [%{field: "id", value: ""}]
       end
 
       defp default_template_filters(_operation), do: []
 
       defp maybe_put_template_attributes(payload, operation, _attributes)
-           when operation in ["delete", "soft_delete"] do
+           when operation == "delete" do
         payload
       end
 
       defp maybe_put_template_attributes(payload, _operation, attributes) do
         Map.put(payload, :attributes, attributes)
       end
-
-      defp maybe_put_confirm_bulk_delete(payload, "delete") do
-        Map.put(payload, :confirm_bulk_delete, false)
-      end
-
-      defp maybe_put_confirm_bulk_delete(payload, _operation), do: payload
 
       defp template_attributes(operation, fields) when is_map(fields) do
         fields
@@ -1019,8 +1036,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
       defp template_attributes(_operation, _fields), do: %{}
 
-      defp template_fields(fields, operation)
-           when operation in ["insert", "insert_all", "insert_from_query"] do
+      defp template_fields(fields, "insert") do
         required_fields =
           fields
           |> Enum.filter(fn {_field, config} ->
@@ -1035,13 +1051,13 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         end
       end
 
-      defp template_fields(fields, operation) when operation in ["update", "soft_delete"] do
+      defp template_fields(fields, "update") do
         fields
         |> writable_template_fields(:updatable)
         |> Enum.take(8)
       end
 
-      defp template_fields(fields, operation) when operation in ["upsert", "upsert_all"] do
+      defp template_fields(fields, "upsert") do
         fields
         |> Enum.filter(fn {_field, config} ->
           Map.get(config, :insertable) == true or Map.get(config, :updatable) == true
@@ -1317,8 +1333,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         end
       end
 
-      defp field_required_for_operation?(operation, config)
-           when operation in ["insert", "insert_all", "insert_from_query"] do
+      defp field_required_for_operation?("insert", config) do
         Map.get(config, :required_on_insert) == true
       end
 
@@ -1339,15 +1354,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         end
       end
 
-      defp domain_for_write(config) do
-        domain = config.domain_module.domain()
-        source_map = Map.get(domain, :source, %{})
-        columns = if is_map(source_map), do: Map.get(source_map, :columns, %{}), else: %{}
-
-        domain
-        |> Map.put(:source, config.schema_module)
-        |> Map.put_new(:columns, columns)
-      end
+      defp domain_for_write(config), do: contract_domain(config)
 
       defp contract_domain(config), do: config.domain_module.domain()
     end

@@ -1,6 +1,19 @@
 CHANGES
 =======
 
+V 0.4.9
+----------
+
+- Migrated generated Updato APIs to require a server-owned
+  `%Selecto{}` write target. Generated writes no longer execute through or
+  discover an Ecto Repo.
+- Removed generated retired bulk-confirmation, soft-delete, bulk insert,
+  insert-from-query, and bulk-upsert code paths.
+- Replaced the Ecto schema/Repo generator defaults with a named read connection
+  and a fail-closed `write_selecto: nil` boundary.
+- Normalized legacy returning aliases to the portable `:all`/`:none`
+  command surface and kept PostgreSQL adapter ownership explicit.
+
 V 0.4.8
 ----------
 

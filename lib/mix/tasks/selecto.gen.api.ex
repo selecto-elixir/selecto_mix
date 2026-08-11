@@ -17,8 +17,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
   ## Options
 
     * `--domain` - Domain module used by generated API module (default: inferred)
-    * `--schema` - Ecto schema module used for write operations (default: inferred)
-    * `--repo` - Repo module used for execution (default: `MyApp.Repo`)
+    * `--connection` - named Selecto read connection (default: `MyApp.SelectoPostgreSQL`)
+    * `--repo` - deprecated alias for `--connection`
     * `--api-path` - Route path used in controller docs (default: `/api/v1/updato/<name>`)
     * `--panel-path` - Route path used for the control panel (default: `/updato/<name>/control`)
     * `--panel-in-prod` - Include control panel route in production snippets (default: false)
@@ -43,6 +43,11 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
   preview/apply and generated query endpoints should fail closed without a
   resolver. Query capability enforcement uses `SelectoComponents.QueryContract`
   when that dependency is available in the generated host app.
+
+  Write execution is never inferred from the read connection. Customize the
+  generated `api_config/1` and LiveView assigns with a server-owned
+  `%Selecto{}` configured with `SelectoDBPostgreSQL.Adapter`. The nil default
+  fails closed and does not require Ecto application configuration.
   """
 
   use Mix.Task
@@ -55,7 +60,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
   @switches [
     domain: :string,
-    schema: :string,
+    connection: :string,
     repo: :string,
     api_path: :string,
     panel_path: :string,
@@ -82,8 +87,8 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         name_module: name_module,
         name_snake: name_snake,
         domain_module: opts[:domain] || infer_domain_module(app_module, name_module),
-        schema_module: opts[:schema] || infer_schema_module(app_module, name_module),
-        repo_module: opts[:repo] || app_module <> ".Repo",
+        read_connection_module:
+          opts[:connection] || opts[:repo] || app_module <> ".SelectoPostgreSQL",
         api_path: opts[:api_path] || "/api/v1/updato/#{name_snake}",
         panel_path: opts[:panel_path] || "/updato/#{name_snake}/control",
         panel_in_prod?: !!opts[:panel_in_prod],
@@ -113,10 +118,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
   defp infer_domain_module(app_module, name_module) do
     app_module <> "." <> name_module <> "Domain"
-  end
-
-  defp infer_schema_module(app_module, name_module) do
-    app_module <> ".Hierarchy." <> name_module
   end
 
   defp generate_files(config) do

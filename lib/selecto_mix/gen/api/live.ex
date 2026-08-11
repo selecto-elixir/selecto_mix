@@ -28,6 +28,7 @@ defmodule SelectoMix.Gen.Api.Live do
          socket
          |> assign(
            endpoint_config: #{config.name_module}Api.default_config(),
+           write_selecto: nil,
            write_contract_summary: #{config.name_module}Api.write_contract_summary(),
            write_contract_json: encode_contract_for_panel(write_contract),
            write_template_operations: #{config.name_module}Api.write_template_operations(),
@@ -129,7 +130,8 @@ defmodule SelectoMix.Gen.Api.Live do
                 <h2 class="text-base font-medium text-slate-900">Endpoint Configuration</h2>
                 <dl class="mt-4 space-y-2 text-sm text-slate-700">
                   <div><dt class="font-medium">Domain Module</dt><dd>{inspect(@endpoint_config.domain_module)}</dd></div>
-                  <div><dt class="font-medium">Repo</dt><dd>{inspect(@endpoint_config.repo)}</dd></div>
+                  <div><dt class="font-medium">Read connection</dt><dd>{inspect(@endpoint_config.read_connection)}</dd></div>
+                  <div><dt class="font-medium">Write target</dt><dd>{write_target_status(@write_selecto)}</dd></div>
                   <div><dt class="font-medium">Panel Path</dt><dd>{@endpoint_config.panel_path}</dd></div>
                 </dl>
               </section>
@@ -366,9 +368,13 @@ defmodule SelectoMix.Gen.Api.Live do
         |> Map.merge(%{
           choice_source_domain: socket.assigns.choice_source_domain,
           choice_source_membership_resolver: socket.assigns[:choice_source_membership_resolver],
-          choice_source_scope: socket.assigns[:choice_source_scope] || %{}
+          choice_source_scope: socket.assigns[:choice_source_scope] || %{},
+          write_selecto: socket.assigns.write_selecto
         })
       end
+
+      defp write_target_status(%Selecto{}), do: "configured Selecto adapter"
+      defp write_target_status(_), do: "not configured (writes fail closed)"
 
       defp choice_source_field?(%{"choice_source" => choice_source})
            when is_binary(choice_source) and choice_source != "",
