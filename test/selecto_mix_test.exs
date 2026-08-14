@@ -385,7 +385,10 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "# domain_fingerprint: \"sha256:...\"")
       assert String.contains?(result, "source_table: \"tests\"")
       assert String.contains?(result, "primary_key: :id")
-      assert String.contains?(result, "functions: %{}")
+      assert String.contains?(result, "functions: %{")
+      assert String.contains?(result, "# Connected-verification draft")
+      assert String.contains?(result, "#   database: %{")
+      assert String.contains?(result, "#     adapters: [:postgresql]")
     end
 
     test "generate_domain_map/1 emits view source metadata when present" do

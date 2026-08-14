@@ -707,7 +707,22 @@ defmodule SelectoMix.DomainGenerator.MapBuilder do
     if is_map(functions) and map_size(functions) > 0 do
       inspect(functions, pretty: true, width: 60)
     else
-      "%{}"
+      "%{\n" <>
+        "        # Connected-verification draft; edit here or move into a deffunction overlay.\n" <>
+        "        # \"function_id\" => %{\n" <>
+        "        #   kind: :scalar,\n" <>
+        "        #   sql_name: \"public.function_name\",\n" <>
+        "        #   args: [%{name: :value, type: :string, source: :value}],\n" <>
+        "        #   returns: :string,\n" <>
+        "        #   allowed_in: [:select],\n" <>
+        "        #   database: %{\n" <>
+        "        #     adapters: [:postgresql],\n" <>
+        "        #     requires: [],\n" <>
+        "        #     volatility: :stable,\n" <>
+        "        #     minimum_version: 14\n" <>
+        "        #   }\n" <>
+        "        # }\n" <>
+        "      }"
     end
   end
 

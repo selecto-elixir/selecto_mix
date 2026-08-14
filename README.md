@@ -315,7 +315,10 @@ mix selecto.domain.diff priv/selecto/old.normalized.json priv/selecto/new.normal
 
 ## UDF Workflow
 
-Generated domains include a stable `functions: %{}` section.
+Generated domains include a stable `functions: %{}` section with a commented,
+editable draft for connected-verification metadata. The generator does not
+invent a function registration: choose the real SQL name, signature, adapter,
+requirements, volatility, and minimum database version before uncommenting it.
 
 Generated overlays include `deffunction` examples so named function registrations can live outside regenerated files.
 
@@ -324,7 +327,15 @@ Recommended UDF pattern:
 1. generate the domain
 2. keep structural metadata in the generated domain file
 3. add custom `deffunction` definitions in the overlay
-4. regenerate safely as schemas evolve
+4. add a `database` map when the signature should be checked against a connected database
+5. run `mix selecto.functions.verify --domain MyApp.SelectoDomain --strict`
+6. regenerate safely as schemas evolve
+
+Static registry validation proves the Selecto declaration is coherent. The
+verification task asks the configured adapter to resolve the declared database
+signature without executing it. Application-owned semantic fixtures remain a
+separate live test layer for representative inputs, nulls, empty sets, boundary
+values, and other behavior that matters to the application.
 
 ## Status
 
