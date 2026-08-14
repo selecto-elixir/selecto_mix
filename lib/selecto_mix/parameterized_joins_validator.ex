@@ -26,7 +26,6 @@ defmodule SelectoMix.ParameterizedJoinsValidator do
     :utc_datetime,
     :naive_datetime,
     :json,
-    :jsonb,
     :array
   ]
 

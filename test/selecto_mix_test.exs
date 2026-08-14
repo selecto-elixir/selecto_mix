@@ -219,6 +219,7 @@ defmodule SelectoMixTest do
     schema "uuid_records" do
       field(:external_uuid, Ecto.UUID)
       field(:name, :string)
+      field(:metadata, :map)
     end
   end
 
@@ -309,6 +310,7 @@ defmodule SelectoMixTest do
       assert config.primary_key == :public_id
       assert config.field_types.public_id == :binary_id
       assert config.field_types.external_uuid == :uuid
+      assert config.field_types.metadata == :json
     end
   end
 
@@ -358,6 +360,8 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "def domain do")
       assert String.contains?(result, "source:")
       assert String.contains?(result, "test_table")
+      assert result =~ "new/2 requires an explicit :adapter option"
+      assert result =~ "adapter: MyApp.SelectoAdapter"
     end
 
     test "generate_domain_map/1 creates proper domain configuration" do
@@ -614,6 +618,11 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "defmodule Shop.SelectoDomains.ProductDomain")
       assert String.contains?(result, "def source_table, do: \"products\"")
       assert String.contains?(result, "def adapter_module, do: SelectoDBPostgreSQL.Adapter")
+      assert result =~ "Keyword.put_new(opts, :adapter, adapter_module())"
+
+      assert result =~
+               "adapter: Shop.SelectoDomains.ProductDomain.adapter_module()"
+
       refute String.contains?(result, "def from_ecto")
 
       assert String.contains?(
@@ -661,7 +670,10 @@ defmodule SelectoMixTest do
         |> Rewrite.Source.get(:content)
 
       assert live_source =~ "Shop.SelectoDomains.OrderDomain.domain()"
-      assert live_source =~ "Selecto.configure(domain, Shop.ReportingDatabase)"
+
+      assert live_source =~
+               "Selecto.configure(domain, Shop.ReportingDatabase, adapter: SelectoDBSQLite.Adapter)"
+
       assert live_source =~ "Views.spec(:aggregate"
       assert live_source =~ "Views.spec(:detail"
       refute Enum.any?(igniter.warnings, &(&1 =~ "Ecto-only"))
@@ -989,6 +1001,25 @@ defmodule SelectoMixTest do
       assert result =~ "# defwrite_field :name do"
       assert result =~ "# defcapability \"entity.write\" do"
     end
+
+    test "uses portable JSON type and overlay DSL names" do
+      config = %{
+        source: :ecto,
+        columns: %{metadata: %{type: :json}},
+        field_types: %{metadata: :json}
+      }
+
+      result =
+        OverlayGenerator.generate_overlay_file(
+          "Shop.SelectoDomains.ProductDomain",
+          config,
+          []
+        )
+
+      assert result =~ "# defjson_schema :metadata do"
+      refute result =~ "JSONB"
+      refute result =~ "defjsonb_schema"
+    end
   end
 
   describe "StudioArtifactsGenerator" do
@@ -1197,7 +1228,12 @@ defmodule SelectoMixTest do
         )
 
       assert String.contains?(result, "defmodule ShopWeb.ProductLive")
-      assert String.contains?(result, "Selecto.configure(domain, Shop.Database)")
+
+      assert String.contains?(
+               result,
+               "Selecto.configure(domain, Shop.Database, adapter: SelectoDBPostgreSQL.Adapter)"
+             )
+
       assert String.contains?(result, "alias SelectoComponents.Views")
       assert String.contains?(result, "choice_source_domain: domain")
       assert String.contains?(result, "choice_source_transport: :live")

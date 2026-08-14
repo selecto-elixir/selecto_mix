@@ -2,7 +2,8 @@ defmodule SelectoMix.SchemaIntrospector do
   @moduledoc """
   Unified interface for introspecting schemas from any source.
 
-  Supports both Ecto schemas and direct database connections via Postgrex.
+  Supports both Ecto schemas and direct database connections via explicit
+  Selecto database adapters.
   This module provides backward compatibility with the original Ecto-only
   interface while delegating to `SelectoMix.Introspector` (and its backends,
   e.g. `SelectoMix.Introspector.Ecto`) under the hood.
@@ -12,24 +13,23 @@ defmodule SelectoMix.SchemaIntrospector do
       # Ecto schema (original interface - still works)
       config = SelectoMix.SchemaIntrospector.introspect_schema(MyApp.User)
 
-      # Postgrex connection (new interface)
-      {:ok, conn} = Postgrex.start_link(...)
+      # Direct database connection
       config = SelectoMix.SchemaIntrospector.introspect_schema(
-        {:postgrex, conn, "users"}
+        {:db, SelectoDBPostgreSQL.Adapter, conn, "users"}
       )
   """
 
   @doc """
   Introspect a schema source and return Selecto domain configuration data.
 
-  Accepts either an Ecto schema module or a Postgrex connection tuple.
+  Accepts either an Ecto schema module or an explicit adapter source tuple.
 
   ## Parameters
 
   - `source` - Either:
     - Ecto schema module (e.g., `MyApp.User`)
-    - `{:postgrex, conn, table_name}` tuple
-    - `{:postgrex, conn, table_name, schema}` tuple
+    - `{:db, adapter, connection, table_name}` tuple
+    - `{:db, adapter, connection, table_name, opts}` tuple
 
   ## Options
 
@@ -223,25 +223,6 @@ defmodule SelectoMix.SchemaIntrospector do
     %{
       module_name: get_module_name(source),
       context_name: get_context_name(source),
-      has_timestamps: has_timestamps_in_fields?(metadata.fields),
-      estimated_complexity: estimate_complexity_from_metadata(metadata)
-    }
-  end
-
-  defp extract_metadata_from_source({:postgrex, _conn, table_name}, metadata) do
-    # Postgrex connection
-    %{
-      module_name: Macro.camelize(table_name),
-      context_name: "Database",
-      has_timestamps: has_timestamps_in_fields?(metadata.fields),
-      estimated_complexity: estimate_complexity_from_metadata(metadata)
-    }
-  end
-
-  defp extract_metadata_from_source({:postgrex, _conn, table_name, _schema}, metadata) do
-    %{
-      module_name: Macro.camelize(table_name),
-      context_name: "Database",
       has_timestamps: has_timestamps_in_fields?(metadata.fields),
       estimated_complexity: estimate_complexity_from_metadata(metadata)
     }
@@ -461,8 +442,6 @@ defmodule SelectoMix.SchemaIntrospector do
   end
 
   defp source_type_for(source) when is_atom(source), do: :ecto
-  defp source_type_for({:postgrex, _conn, _table_name}), do: :db
-  defp source_type_for({:postgrex, _conn, _table_name, _schema}), do: :db
   defp source_type_for({:db, _adapter, _conn, _table_name}), do: :db
   defp source_type_for({:db, _adapter, _conn, _table_name, _opts}), do: :db
   defp source_type_for(_source), do: :unknown

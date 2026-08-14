@@ -21,6 +21,7 @@ defmodule SelectoMix.LiveViewGenerator do
     schema_underscore = Macro.underscore(schema_name)
     web_module = "#{app_name}Web"
     connection_ref = live_view_connection_ref(source, app_name, opts)
+    adapter_ref = live_view_adapter_ref(source, app_name, opts)
 
     route_path = opts[:path] || "/#{schema_underscore}"
     route_path = if String.starts_with?(route_path, "/"), do: route_path, else: "/#{route_path}"
@@ -96,7 +97,7 @@ defmodule SelectoMix.LiveViewGenerator do
         domain = #{domain_module}.domain()
         path = "#{route_path}"
 
-        selecto = Selecto.configure(domain, #{connection_ref})
+        selecto = Selecto.configure(domain, #{connection_ref}, adapter: #{adapter_ref})
 
         views = [
           Views.spec(:aggregate, Views.Aggregate, "Aggregate View", %{drill_down: :detail}),
@@ -331,6 +332,33 @@ defmodule SelectoMix.LiveViewGenerator do
       _ ->
         "#{app_name}.Repo"
     end
+  end
+
+  defp live_view_adapter_ref({:db, adapter, _conn, _table, _source_opts}, _app_name, _opts),
+    do: inspect(adapter)
+
+  defp live_view_adapter_ref({:db, adapter, _conn, _table}, _app_name, _opts),
+    do: inspect(adapter)
+
+  defp live_view_adapter_ref(_source, app_name, opts) do
+    case opts[:adapter] do
+      adapter when is_atom(adapter) and not is_nil(adapter) ->
+        inspect(adapter)
+
+      adapter when is_binary(adapter) ->
+        case SelectoMix.AdapterResolver.resolve(adapter) do
+          {:ok, module} -> inspect(module)
+          {:error, _reason} -> configured_adapter_ref(app_name)
+        end
+
+      _other ->
+        configured_adapter_ref(app_name)
+    end
+  end
+
+  defp configured_adapter_ref(app_name) do
+    otp_app = app_name |> to_string() |> Macro.underscore()
+    "Application.fetch_env!(:#{otp_app}, :selecto_adapter)"
   end
 
   defp query_contract_route_path(""), do: "/query-contract.json"

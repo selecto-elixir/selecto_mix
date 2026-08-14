@@ -8,12 +8,9 @@ defmodule SelectoMix.DomainGenerator do
 
   This module is a thin facade; the actual rendering work is split across:
 
-    * `SelectoMix.DomainGenerator.FileTemplate` - renders the generated
-      domain module source (moduledoc, helper functions, module naming)
-    * `SelectoMix.DomainGenerator.MapBuilder` - builds the domain
-      configuration map (source, columns, associations, joins, etc.)
-    * `SelectoMix.DomainGenerator.SchemaExpansion` - introspects related
-      schemas and infers table/schema names for expansion
+    * a private file-template renderer for generated module source;
+    * a private map builder for source, column, association, and join config;
+    * private schema-expansion logic for related schemas and inferred names.
   """
 
   alias SelectoMix.DomainGenerator.{FileTemplate, MapBuilder}

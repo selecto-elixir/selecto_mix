@@ -12,11 +12,8 @@ defmodule SelectoMix.Introspector do
     given `adapter` module's `introspect_table/3` (any `selecto_db_*` adapter
     satisfying that contract; see `AdapterResolver`), then normalizes the
     result (table/schema/source/primary-key defaults)
-  - `{:postgrex, connection, table_name}` / `{:postgrex, connection,
-    table_name, schema}` tuples - delegates to
-    `SelectoMix.Introspector.Postgres`, which queries Postgrex/PostgreSQL
-    system catalogs directly
-  - Future: Other database types (MySQL, SQLite, etc.)
+  Database-specific discovery, catalog queries, and native type mapping belong
+  to the selected adapter.
 
   The `@callback` below documents the standardized `introspect/2` contract
   that this facade's own dispatch honors; no module is required to declare
@@ -28,10 +25,9 @@ defmodule SelectoMix.Introspector do
       # Ecto schema
       {:ok, metadata} = SelectoMix.Introspector.introspect(MyApp.User, [])
 
-      # Postgrex connection
-      {:ok, conn} = Postgrex.start_link(...)
+      # Direct database connection through an explicit adapter
       {:ok, metadata} = SelectoMix.Introspector.introspect(
-        {:postgrex, conn, "users"},
+        {:db, SelectoDBPostgreSQL.Adapter, conn, "users"},
         []
       )
 
@@ -74,8 +70,6 @@ defmodule SelectoMix.Introspector do
           module()
           | {:db, module(), term(), table_name :: String.t()}
           | {:db, module(), term(), table_name :: String.t(), keyword()}
-          | {:postgrex, pid() | atom(), table_name :: String.t()}
-          | {:postgrex, pid() | atom(), table_name :: String.t(), schema :: String.t()}
 
   @type metadata :: %{
           table_name: String.t(),
@@ -95,7 +89,7 @@ defmodule SelectoMix.Introspector do
 
   ## Parameters
 
-  - `source` - Schema source (Ecto module, Postgrex connection tuple, etc.)
+  - `source` - Ecto module or explicit `{:db, adapter, connection, table, opts}` source
   - `opts` - Options passed to the specific introspector
 
   ## Returns
@@ -107,7 +101,7 @@ defmodule SelectoMix.Introspector do
 
   @doc """
   Introspects `source`, dispatching to the appropriate backend based on its
-  shape (Ecto module, `{:db, ...}` adapter tuple, or `{:postgrex, ...}` tuple).
+  shape (Ecto module or `{:db, ...}` adapter tuple).
   """
   def introspect(source, opts \\ []) do
     case source do
@@ -121,32 +115,9 @@ defmodule SelectoMix.Introspector do
       module when is_atom(module) ->
         SelectoMix.Introspector.Ecto.introspect(module, opts)
 
-      # Postgrex connection tuple
-      {:postgrex, _conn, _table_name} = tuple ->
-        introspect_postgrex(tuple, opts)
-
-      {:postgrex, _conn, _table_name, _schema} = tuple ->
-        introspect_postgrex(tuple, opts)
-
-      # Future: other database types
-      {:mysql, _conn, _table_name} ->
-        {:error, :mysql_not_yet_supported}
-
-      {:sqlite, _conn, _table_name} ->
-        {:error, :sqlite_not_yet_supported}
-
       other ->
         {:error, {:unsupported_source_type, other}}
     end
-  end
-
-  defp introspect_postgrex({:postgrex, conn, table_name}, opts) do
-    SelectoMix.Introspector.Postgres.introspect_table(conn, table_name, opts)
-  end
-
-  defp introspect_postgrex({:postgrex, conn, table_name, schema}, opts) do
-    opts = Keyword.put(opts, :schema, schema)
-    SelectoMix.Introspector.Postgres.introspect_table(conn, table_name, opts)
   end
 
   defp introspect_db({:db, adapter, connection, table_name, source_opts}, opts) do

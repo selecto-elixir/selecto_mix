@@ -38,6 +38,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         api_path: "#{config.api_path}",
         panel_path: "#{config.panel_path}",
         domain_module: #{config.domain_module},
+        read_adapter: #{inspect(config.read_adapter_module)},
         read_connection: #{config.read_connection_module},
         write_selecto: nil
       }
@@ -600,7 +601,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
         selecto =
           domain
-          |> Selecto.configure(config.read_connection)
+          |> Selecto.configure(config.read_connection, adapter: config.read_adapter)
           |> maybe_select(Map.get(params, "select"))
           |> apply_query_filters(normalize_filters(Map.get(params, "filters", [])))
           |> apply_order_by(normalize_order_by(Map.get(params, "order_by", [])), config)

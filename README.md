@@ -29,10 +29,9 @@ counterexamples when an invariant fails.
 ```elixir
 def deps do
   [
-    {:selecto_mix, ">= 0.4.8 and < 0.6.0"},
-    {:selecto, ">= 0.4.9 and < 0.6.0"},
-    {:selecto_db_postgresql, ">= 0.4.6 and < 0.6.0"},
-    {:postgrex, ">= 0.0.0"},
+    {:selecto_mix, ">= 0.5.0 and < 0.6.0"},
+    {:selecto, ">= 0.5.0 and < 0.6.0"},
+    {:selecto_db_postgresql, ">= 0.5.0 and < 0.6.0"},
     {:ecto, "~> 3.10"}
   ]
 end
@@ -161,10 +160,12 @@ Generate an Updato API endpoint and control panel:
 ```bash
 mix selecto.gen.api products \
   --domain MyApp.SelectoDomains.ProductDomain \
+  --adapter postgresql \
   --connection MyApp.SelectoPostgreSQL
 ```
 
-Generated reads use the named connection. Generated writes fail closed until
+Generated reads use the explicitly selected adapter and named connection.
+Generated writes fail closed until
 `api_config/1` or the control-panel socket provides a server-owned
 `%Selecto{}` configured with `SelectoDBPostgreSQL.Adapter`. No Ecto schema,
 Repo target, or `:ecto_repos` configuration is required for the write path.

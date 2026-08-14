@@ -130,6 +130,7 @@ defmodule SelectoMix.Gen.Api.Live do
                 <h2 class="text-base font-medium text-slate-900">Endpoint Configuration</h2>
                 <dl class="mt-4 space-y-2 text-sm text-slate-700">
                   <div><dt class="font-medium">Domain Module</dt><dd>{inspect(@endpoint_config.domain_module)}</dd></div>
+                  <div><dt class="font-medium">Read adapter</dt><dd>{inspect(@endpoint_config.read_adapter)}</dd></div>
                   <div><dt class="font-medium">Read connection</dt><dd>{inspect(@endpoint_config.read_connection)}</dd></div>
                   <div><dt class="font-medium">Write target</dt><dd>{write_target_status(@write_selecto)}</dd></div>
                   <div><dt class="font-medium">Panel Path</dt><dd>{@endpoint_config.panel_path}</dd></div>

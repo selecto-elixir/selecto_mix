@@ -111,9 +111,9 @@ defmodule SelectoMix.DomainGenerator.MapBuilder do
         type = Map.get(field_types, field, :string)
         base_config = %{type: type}
 
-        # For JSONB columns, add a placeholder schema that can be customized in the overlay
+        # For JSON columns, add a placeholder schema that can be customized in the overlay
         config =
-          if type == :jsonb do
+          if type == :json do
             Map.put(base_config, :schema, :stub)
           else
             base_config

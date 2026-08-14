@@ -12,12 +12,13 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
   ## Usage
 
-      mix selecto.gen.api orders --domain MyApp.OrdersDomain
+      mix selecto.gen.api orders --domain MyApp.OrdersDomain --adapter postgresql
 
   ## Options
 
     * `--domain` - Domain module used by generated API module (default: inferred)
-    * `--connection` - named Selecto read connection (default: `MyApp.SelectoPostgreSQL`)
+    * `--adapter` - required Selecto read adapter module or known short name
+    * `--connection` - named Selecto read connection (default: `MyApp.SelectoDatabase`)
     * `--repo` - deprecated alias for `--connection`
     * `--api-path` - Route path used in controller docs (default: `/api/v1/updato/<name>`)
     * `--panel-path` - Route path used for the control panel (default: `/updato/<name>/control`)
@@ -60,6 +61,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
   @switches [
     domain: :string,
+    adapter: :string,
     connection: :string,
     repo: :string,
     api_path: :string,
@@ -87,8 +89,9 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         name_module: name_module,
         name_snake: name_snake,
         domain_module: opts[:domain] || infer_domain_module(app_module, name_module),
+        read_adapter_module: read_adapter_module!(opts[:adapter]),
         read_connection_module:
-          opts[:connection] || opts[:repo] || app_module <> ".SelectoPostgreSQL",
+          opts[:connection] || opts[:repo] || app_module <> ".SelectoDatabase",
         api_path: opts[:api_path] || "/api/v1/updato/#{name_snake}",
         panel_path: opts[:panel_path] || "/updato/#{name_snake}/control",
         panel_in_prod?: !!opts[:panel_in_prod],
@@ -118,6 +121,20 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
 
   defp infer_domain_module(app_module, name_module) do
     app_module <> "." <> name_module <> "Domain"
+  end
+
+  defp read_adapter_module!(nil) do
+    Mix.raise(
+      "Missing --adapter. Pass a known adapter name such as postgresql, sqlite, mysql, " <>
+        "mariadb, duckdb, or mssql, or pass a fully qualified adapter module."
+    )
+  end
+
+  defp read_adapter_module!(adapter) do
+    case SelectoMix.AdapterResolver.resolve(adapter) do
+      {:ok, module} -> module
+      {:error, reason} -> Mix.raise("Invalid --adapter: #{inspect(reason)}")
+    end
   end
 
   defp generate_files(config) do

@@ -25,7 +25,7 @@ defmodule SelectoMix.OverlayGenerator do
     filter_examples = generate_filter_examples_dsl(config)
     function_examples = generate_function_examples_dsl()
     redaction_example = generate_redaction_example(config)
-    jsonb_examples = generate_jsonb_schema_examples(config)
+    json_examples = generate_json_schema_examples(config)
     query_member_examples = generate_query_member_examples_dsl()
     choice_source_examples = generate_choice_source_examples_dsl(config)
     write_contract_examples = generate_write_contract_examples_dsl(config)
@@ -45,7 +45,7 @@ defmodule SelectoMix.OverlayGenerator do
        - Add redaction to sensitive fields
        - Define custom filters
        - Register named UDFs with `deffunction`
-       - Define JSONB schemas for structured data columns
+       - Define JSON schemas for structured data columns
        - Define named query members (CTE/VALUES/subquery/LATERAL/UNNEST presets)
        - Bind fields to choice sources with resolver constraint policies
        - Define write contracts, actions, and capabilities for Updato/tooling
@@ -85,8 +85,8 @@ defmodule SelectoMix.OverlayGenerator do
              allowed_in [:select, :order_by]
            end
 
-          # JSONB schema definitions with defjsonb_schema
-          defjsonb_schema :attributes do
+          # JSON schema definitions with defjson_schema
+          defjson_schema :attributes do
             %{
               "color" => %{type: :string, required: true},
               "size" => %{type: :string, enum: ["small", "medium", "large"]}
@@ -187,7 +187,7 @@ defmodule SelectoMix.OverlayGenerator do
     #{query_member_examples}
     #{choice_source_examples}
     #{write_contract_examples}
-    #{jsonb_examples}
+    #{json_examples}
     end
     """
   end
@@ -576,33 +576,33 @@ defmodule SelectoMix.OverlayGenerator do
     |> Enum.join(" ")
   end
 
-  defp generate_jsonb_schema_examples(config) do
+  defp generate_json_schema_examples(config) do
     columns = extract_columns(config, config[:field_types] || %{})
 
-    # Find JSONB columns
-    jsonb_columns =
+    # Find portable JSON columns
+    json_columns =
       columns
       |> Enum.filter(fn {_field, col_config} ->
         type = if is_map(col_config), do: Map.get(col_config, :type), else: col_config
-        type == :jsonb
+        type == :json
       end)
       |> Enum.map(fn {field_name, _} -> field_name end)
 
-    if Enum.empty?(jsonb_columns) do
+    if Enum.empty?(json_columns) do
       ""
     else
       examples =
-        jsonb_columns
-        |> Enum.map(&generate_jsonb_schema_example/1)
+        json_columns
+        |> Enum.map(&generate_json_schema_example/1)
         |> Enum.join("\n\n")
 
       """
 
         # ============================================================================
-        # JSONB Schema Definitions
+        # JSON Schema Definitions
         # ============================================================================
         #
-        # Define the structure of your JSONB columns to enable:
+        # Define the structure of your JSON columns to enable:
         # - Type-safe filtering with dot notation (e.g., attributes.color = "red")
         # - Validation on inserts/updates
         # - GraphQL type generation
@@ -614,11 +614,11 @@ defmodule SelectoMix.OverlayGenerator do
     end
   end
 
-  defp generate_jsonb_schema_example(field_name) do
+  defp generate_json_schema_example(field_name) do
     field_str = to_string(field_name)
 
     """
-      # defjsonb_schema :#{field_str} do
+      # defjson_schema :#{field_str} do
       #   %{
       #     # String field with validation
       #     "color" => %{type: :string, required: true},

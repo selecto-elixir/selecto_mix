@@ -4,7 +4,7 @@ defmodule SelectoMix.MixProject do
   def project do
     [
       app: :selecto_mix,
-      version: "0.4.9",
+      version: "0.5.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -23,7 +23,6 @@ defmodule SelectoMix.MixProject do
     [
       {:igniter, "~> 0.6"},
       {:ecto, "~> 3.10"},
-      {:postgrex, ">= 0.0.0", optional: true},
       {:jason, "~> 1.4"},
       {:stream_data, "~> 1.1", only: :test},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}

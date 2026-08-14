@@ -1,6 +1,26 @@
 CHANGES
 =======
 
+V 0.5.0
+----------
+
+- Updated generated dependency baselines to Selecto, PostgreSQL adapter, and
+  Components `0.5.0` for the explicit adapter/runtime boundary.
+- New generated applications no longer receive a dependency range that can
+  resolve to the removed implicit-PostgreSQL compatibility surface.
+- Generated domains and LiveViews now place an explicit adapter into every
+  `Selecto.configure/3` call. Ecto-backed domain helpers require callers to
+  supply `adapter:`, while database-introspected domains reuse their recorded
+  adapter module.
+- `mix selecto.gen.api` now requires `--adapter` and records separate
+  `read_adapter` and `read_connection` values in generated endpoint config.
+- Removed the package's direct Postgrex dependency and duplicate PostgreSQL
+  catalog introspector. Direct database generation now always uses the selected
+  adapter's `introspect_table/3` contract.
+- Ecto maps and generated overlays now use the portable `:json` type and
+  `defjson_schema` DSL instead of PostgreSQL-specific JSONB names.
+- Added the repository's declared MIT license artifact to release packages.
+
 V 0.4.9
 ----------
 

@@ -157,13 +157,28 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
     kind = source_kind(schema_module, config)
     source_helpers = source_specific_helper_functions(kind, schema_module, config)
 
+    adapter_setup =
+      case kind do
+        :db ->
+          ["  opts = Keyword.put_new(opts, :adapter, adapter_module())"]
+
+        :ecto ->
+          [
+            "  unless Keyword.has_key?(opts, :adapter) do",
+            "    raise ArgumentError, \"new/2 requires an explicit :adapter option\"",
+            "  end"
+          ]
+      end
+
     [
       "@doc \"Create a new Selecto instance configured with this domain.\"",
       "def new(connection, opts \\\\ []) do",
       "  # Enable validation by default in development and test environments",
       "  validate = Keyword.get(opts, :validate, Mix.env() in [:dev, :test])",
       "  opts = Keyword.put(opts, :validate, validate)",
-      "  ",
+      "",
+      adapter_setup,
+      "",
       "  Selecto.configure(domain(), connection, opts)",
       "end",
       "",
@@ -277,8 +292,6 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
       config[:source_type] == :db -> :db
       match?({:db, _, _, _}, source) -> :db
       match?({:db, _, _, _, _}, source) -> :db
-      match?({:postgrex, _, _}, source) -> :db
-      match?({:postgrex, _, _, _}, source) -> :db
       is_binary(source) -> :db
       true -> :ecto
     end
@@ -297,7 +310,10 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
   defp usage_examples(:db, _source, module_name) do
     """
           # Basic usage
-          selecto = Selecto.configure(#{module_name}.domain(), MyApp.Database)
+          selecto =
+            Selecto.configure(#{module_name}.domain(), MyApp.Database,
+              adapter: #{module_name}.adapter_module()
+            )
 
           # Execute queries
           {:ok, {rows, columns, aliases}} = Selecto.execute(selecto)
@@ -307,10 +323,16 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
   defp usage_examples(:ecto, source, module_name) do
     """
           # Basic usage
-          selecto = Selecto.configure(#{module_name}.domain(), MyApp.Repo)
+          selecto =
+            Selecto.configure(#{module_name}.domain(), MyApp.Repo,
+              adapter: MyApp.SelectoAdapter
+            )
 
           # With Ecto integration
-          selecto = Selecto.from_ecto(MyApp.Repo, #{inspect(source)})
+          selecto =
+            Selecto.from_ecto(MyApp.Repo, #{inspect(source)},
+              adapter: MyApp.SelectoAdapter
+            )
 
           # Execute queries
           {:ok, {rows, columns, aliases}} = Selecto.execute(selecto)

@@ -3,6 +3,20 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
 
   import ExUnit.CaptureIO
 
+  test "requires an explicit read adapter" do
+    in_tmp_dir("selecto_mix_gen_api_adapter", fn ->
+      Mix.Task.reenable("selecto.gen.api")
+
+      assert_raise Mix.Error, ~r/Missing --adapter/, fn ->
+        Mix.Tasks.Selecto.Gen.Api.run([
+          "orders",
+          "--domain",
+          "Shop.SelectoDomains.OrderDomain"
+        ])
+      end
+    end)
+  end
+
   test "generated API surfaces the domain-authored Updato write contract" do
     in_tmp_dir("selecto_mix_gen_api_contract", fn ->
       Mix.Task.reenable("selecto.gen.api")
@@ -13,6 +27,8 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
             "orders",
             "--domain",
             "Shop.SelectoDomains.OrderDomain",
+            "--adapter",
+            "postgresql",
             "--connection",
             "Shop.SelectoPostgreSQL",
             "--api-path",
@@ -31,6 +47,11 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert {:ok, _} = Code.string_to_quoted(control_panel)
 
       assert api_module =~ "alias SelectoUpdato.DomainContract"
+      assert api_module =~ "read_adapter: SelectoDBPostgreSQL.Adapter"
+
+      assert api_module =~
+               "Selecto.configure(config.read_connection, adapter: config.read_adapter)"
+
       assert api_module =~ "def choice_source_domain(config"
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
