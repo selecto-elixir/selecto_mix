@@ -1,6 +1,10 @@
 unless Code.ensure_loaded?(Selecto) do
   defmodule Selecto do
     def configure(domain, _connection, _opts \\ []), do: {:configured, domain}
+
+    def configure_registered(domain_id, _connection, opts),
+      do: {:configured_registered, domain_id, opts}
+
     def from_ecto(repo, schema, opts \\ []), do: {:from_ecto, repo, schema, opts}
     def select(selecto, _fields), do: selecto
     def filter(selecto, _filter), do: selecto
@@ -28,6 +32,25 @@ unless Code.ensure_loaded?(Selecto.DomainValidator.ValidationError) do
 
     @impl Exception
     def message(%{errors: errors}), do: "Selecto domain validation failed: #{inspect(errors)}"
+  end
+end
+
+unless Code.ensure_loaded?(Selecto.Domain.Registry) do
+  defmodule Selecto.Domain.Registry do
+    defmacro __using__(opts) do
+      id = Keyword.fetch!(opts, :id)
+
+      quote do
+        def domain_id, do: unquote(id)
+        def domain_ref, do: %{id: unquote(id), registry: __MODULE__}
+
+        def fetch(id, _context) when is_binary(id) or is_atom(id) do
+          if to_string(id) == unquote(id), do: {:ok, domain()}, else: {:error, :not_found}
+        end
+
+        def fetch(_id, _context), do: {:error, :not_found}
+      end
+    end
   end
 end
 
@@ -640,6 +663,10 @@ defmodule SelectoMix.DomainExportTaskTest do
       assert plan["source_preview"]["target_module"] == "Preview.TargetDomain"
       assert plan["source_preview"]["includes_runtime_placeholders"] == true
       assert plan["source_preview"]["content"] =~ "defmodule Preview.TargetDomain do"
+
+      assert plan["source_preview"]["content"] =~
+               ~s(use Selecto.Domain.Registry, id: "target")
+
       assert plan["source_preview"]["content"] =~ "def domain do"
       assert plan["source_preview"]["content"] =~ ~s("$selecto_export" => "function")
       assert plan["source_validation"]["valid"] == true

@@ -358,6 +358,8 @@ defmodule SelectoMixTest do
       assert is_binary(result)
       assert String.contains?(result, "defmodule")
       assert String.contains?(result, "def domain do")
+      assert result =~ ~s(use Selecto.Domain.Registry, id: "test_schema")
+      assert result =~ "Selecto.configure_registered(domain_id(), connection"
       assert String.contains?(result, "source:")
       assert String.contains?(result, "test_table")
       assert result =~ "new/2 requires an explicit :adapter option"
@@ -669,10 +671,12 @@ defmodule SelectoMixTest do
         |> Rewrite.source!(live_path)
         |> Rewrite.Source.get(:content)
 
-      assert live_source =~ "Shop.SelectoDomains.OrderDomain.domain()"
+      assert live_source =~ "Shop.SelectoDomains.OrderDomain.domain_ref()"
 
       assert live_source =~
-               "Selecto.configure(domain, Shop.ReportingDatabase, adapter: SelectoDBSQLite.Adapter)"
+               "Selecto.configure_registered(domain_ref, Shop.ReportingDatabase,"
+
+      assert live_source =~ "adapter: SelectoDBSQLite.Adapter"
 
       assert live_source =~ "Views.spec(:aggregate"
       assert live_source =~ "Views.spec(:detail"
@@ -1231,11 +1235,12 @@ defmodule SelectoMixTest do
 
       assert String.contains?(
                result,
-               "Selecto.configure(domain, Shop.Database, adapter: SelectoDBPostgreSQL.Adapter)"
+               "Selecto.configure_registered(domain_ref, Shop.Database,"
              )
 
+      assert result =~ "adapter: SelectoDBPostgreSQL.Adapter"
       assert String.contains?(result, "alias SelectoComponents.Views")
-      assert String.contains?(result, "choice_source_domain: domain")
+      assert String.contains?(result, "choice_source_domain: domain_ref")
       assert String.contains?(result, "choice_source_transport: :live")
 
       assert String.contains?(
@@ -1294,15 +1299,26 @@ defmodule SelectoMixTest do
       assert result =~ "pipe_through :browser"
       assert result =~ ~s(forward "/reports/products/query-contract.json")
       assert result =~ "SelectoComponents.QueryContract.Plug"
-      assert result =~ "domain: Shop.SelectoDomains.ProductDomain.domain()"
+      assert result =~ "registry: Shop.SelectoDomains.ProductDomain"
+      refute result =~ "domain: Shop.SelectoDomains.ProductDomain.domain()"
       assert result =~ ~s(domain_path: "/reports/products")
       assert result =~ ~s(query_contract_url: "/reports/products/query-contract.json")
       assert result =~ ~s(query_guide_url: "/reports/products/query-guide.md")
       assert result =~ ~s(forward "/reports/products/query-guide.md")
       assert result =~ "SelectoComponents.QueryContract.Guide.Plug"
-      assert result =~ ~s(domain_id: "product")
+      assert result =~ "domain_id: Shop.SelectoDomains.ProductDomain.domain_id()"
       assert result =~ ~s(forward "/reports/products/query-intent/validate")
       assert result =~ "SelectoComponents.QueryContract.IntentValidator.Plug"
+
+      aggregate_registry_result =
+        LiveViewGenerator.route_suggestion(source,
+          domain_module: "Shop.SelectoDomains.ProductDomain",
+          domain_registry: "Shop.SelectoDomains.Registry",
+          domain_id: "catalog-products"
+        )
+
+      assert aggregate_registry_result =~ "registry: Shop.SelectoDomains.Registry"
+      assert aggregate_registry_result =~ ~s(domain_id: "catalog-products")
     end
 
     test "renders form controller even when initially collapsed" do

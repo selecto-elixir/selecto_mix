@@ -8,6 +8,7 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
   """
   def render(schema_module, config, opts \\ []) do
     module_name = get_domain_module_name(schema_module, config, opts)
+    domain_id = domain_id(module_name)
     overlay_module_name = SelectoMix.OverlayGenerator.overlay_module_name(module_name)
     saved_views_use = generate_saved_views_use(opts)
     kind = source_kind(schema_module, config)
@@ -97,6 +98,7 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
       Keep app-specific customizations in the overlay module so regeneration can
       replace this generated base file intentionally.
       \"\"\"
+      use Selecto.Domain.Registry, id: #{inspect(domain_id)}
     #{saved_views_use}
       @doc \"\"\"
       Returns the Selecto domain configuration for #{source_label}.
@@ -173,13 +175,9 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
     [
       "@doc \"Create a new Selecto instance configured with this domain.\"",
       "def new(connection, opts \\\\ []) do",
-      "  # Enable validation by default in development and test environments",
-      "  validate = Keyword.get(opts, :validate, Mix.env() in [:dev, :test])",
-      "  opts = Keyword.put(opts, :validate, validate)",
-      "",
       adapter_setup,
       "",
-      "  Selecto.configure(domain(), connection, opts)",
+      "  Selecto.configure_registered(domain_id(), connection, Keyword.put(opts, :registry, __MODULE__))",
       "end",
       "",
       "@doc \"Validate the domain configuration (Selecto 0.3.0+).\"",
@@ -311,7 +309,8 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
     """
           # Basic usage
           selecto =
-            Selecto.configure(#{module_name}.domain(), MyApp.Database,
+            Selecto.configure_registered(#{module_name}.domain_id(), MyApp.Database,
+              registry: #{module_name},
               adapter: #{module_name}.adapter_module()
             )
 
@@ -324,7 +323,8 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
     """
           # Basic usage
           selecto =
-            Selecto.configure(#{module_name}.domain(), MyApp.Repo,
+            Selecto.configure_registered(#{module_name}.domain_id(), MyApp.Repo,
+              registry: #{module_name},
               adapter: MyApp.SelectoAdapter
             )
 
@@ -337,6 +337,14 @@ defmodule SelectoMix.DomainGenerator.FileTemplate do
           # Execute queries
           {:ok, {rows, columns, aliases}} = Selecto.execute(selecto)
     """
+  end
+
+  defp domain_id(module_name) do
+    module_name
+    |> String.split(".")
+    |> List.last()
+    |> String.replace_suffix("Domain", "")
+    |> Macro.underscore()
   end
 
   defp regeneration_command(:db, _source, config) do

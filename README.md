@@ -95,6 +95,12 @@ Generate a domain plus LiveView wiring:
 mix selecto.gen.domain MyApp.Catalog.Product --live
 ```
 
+Generated domain modules are trusted single-domain registries with a stable
+`domain_id/0` and opaque `domain_ref/0`. Their `new/2`, LiveView, query-contract
+routes, and generated API reads use `Selecto.configure_registered/3`; authored
+domain maps remain inside server-owned modules instead of crossing request or
+component boundaries.
+
 ### Generate a working LiveView without Ecto
 
 Database-backed generation can introspect an existing table and generate the
@@ -177,7 +183,7 @@ choice-source resolvers and scope from the LiveView socket or session:
 ```elixir
 socket
 |> assign(
-  choice_source_domain: MyApp.SelectoDomains.ProductChoiceSources.domain(),
+  choice_source_domain: MyApp.SelectoDomains.ProductChoiceSources.domain_ref(),
   choice_source_options_resolver: &MyApp.SelectoDomains.ProductChoiceSources.resolve_options/1,
   choice_source_membership_resolver: &MyApp.SelectoDomains.ProductChoiceSources.resolve_membership/1,
   choice_source_value_parser: &MyApp.SelectoDomains.ProductChoiceSources.parse_value/2,

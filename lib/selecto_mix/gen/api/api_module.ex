@@ -38,6 +38,9 @@ defmodule SelectoMix.Gen.Api.ApiModule do
         api_path: "#{config.api_path}",
         panel_path: "#{config.panel_path}",
         domain_module: #{config.domain_module},
+        domain_registry: #{config.domain_module},
+        domain_id: #{config.domain_module}.domain_id(),
+        domain_context: %{},
         read_adapter: #{inspect(config.read_adapter_module)},
         read_connection: #{config.read_connection_module},
         write_selecto: nil
@@ -45,7 +48,9 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
       def default_config, do: @default_config
 
-      def choice_source_domain(config \\\\ @default_config), do: contract_domain(config)
+      def choice_source_domain(config \\\\ @default_config) do
+        Selecto.Domain.Ref.new(config.domain_id, config.domain_registry)
+      end
 
       def write_contract(config \\\\ @default_config, opts \\\\ []) do
         config
@@ -597,11 +602,12 @@ defmodule SelectoMix.Gen.Api.ApiModule do
       end
 
       defp build_query(params, config) do
-        domain = config.domain_module.domain()
-
         selecto =
-          domain
-          |> Selecto.configure(config.read_connection, adapter: config.read_adapter)
+          Selecto.configure_registered(config.domain_id, config.read_connection,
+            registry: config.domain_registry,
+            domain_context: config.domain_context,
+            adapter: config.read_adapter
+          )
           |> maybe_select(Map.get(params, "select"))
           |> apply_query_filters(normalize_filters(Map.get(params, "filters", [])))
           |> apply_order_by(normalize_order_by(Map.get(params, "order_by", [])), config)
@@ -762,7 +768,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
       defp normalize_order_dir(_), do: :desc
 
       defp primary_key(config) do
-        domain = config.domain_module.domain()
+        domain = contract_domain(config)
 
         source =
           case domain do
@@ -830,7 +836,7 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
       defp normalize_attributes(attrs, config) when is_map(attrs) do
         allowed_fields =
-          config.domain_module.domain()
+          contract_domain(config)
           |> Map.get(:source, %{})
           |> Map.get(:columns, %{})
           |> Map.keys()
@@ -1357,7 +1363,14 @@ defmodule SelectoMix.Gen.Api.ApiModule do
 
       defp domain_for_write(config), do: contract_domain(config)
 
-      defp contract_domain(config), do: config.domain_module.domain()
+      defp contract_domain(config) do
+        Selecto.Domain.Registry.resolve!(
+          config.domain_registry,
+          config.domain_id,
+          config.domain_context
+        )
+        |> elem(0)
+      end
     end
     """
   end

@@ -40,7 +40,7 @@ defmodule SelectoMix.LiveViewGenerator do
               saved_view_module: #{domain_module},
               saved_view_context: path,
               available_saved_views: saved_views,
-              choice_source_domain: domain,
+              choice_source_domain: domain_ref,
               choice_source_context: %{surface: :generated_live_view, path: path},
               choice_source_transport: :live
             )
@@ -53,7 +53,7 @@ defmodule SelectoMix.LiveViewGenerator do
               views: views,
               my_path: path,
               path: path,
-              choice_source_domain: domain,
+              choice_source_domain: domain_ref,
               choice_source_context: %{surface: :generated_live_view, path: path},
               choice_source_transport: :live
             )
@@ -94,10 +94,11 @@ defmodule SelectoMix.LiveViewGenerator do
 
       @impl true
       def mount(_params, _session, socket) do
-        domain = #{domain_module}.domain()
+        domain_ref = #{domain_module}.domain_ref()
         path = "#{route_path}"
 
-        selecto = Selecto.configure(domain, #{connection_ref}, adapter: #{adapter_ref})
+        selecto =
+          Selecto.configure_registered(domain_ref, #{connection_ref}, adapter: #{adapter_ref})
 
         views = [
           Views.spec(:aggregate, Views.Aggregate, "Aggregate View", %{drill_down: :detail}),
@@ -189,7 +190,14 @@ defmodule SelectoMix.LiveViewGenerator do
       |> String.trim("/")
 
     domain_module = opts[:domain_module] || "#{schema_name}Domain"
-    domain_id = opts[:domain_id] || schema_underscore
+    domain_registry = opts[:domain_registry] || domain_module
+
+    domain_id =
+      case opts[:domain_id] do
+        nil -> "#{domain_module}.domain_id()"
+        id -> inspect(id)
+      end
+
     domain_path = opts[:domain_path] || domain_route_path(route_path)
     query_contract_url = query_contract_route_path(route_path)
     query_guide_url = query_guide_route_path(route_path)
@@ -208,24 +216,24 @@ defmodule SelectoMix.LiveViewGenerator do
 
         forward "#{query_contract_url}",
                 SelectoComponents.QueryContract.Plug,
-                domain: #{domain_module}.domain(),
-                domain_id: "#{domain_id}",
+                registry: #{domain_registry},
+                domain_id: #{domain_id},
                 domain_path: "#{domain_path}",
                 query_contract_url: "#{query_contract_url}",
                 query_guide_url: "#{query_guide_url}"
 
         forward "#{query_guide_url}",
                 SelectoComponents.QueryContract.Guide.Plug,
-                domain: #{domain_module}.domain(),
-                domain_id: "#{domain_id}",
+                registry: #{domain_registry},
+                domain_id: #{domain_id},
                 domain_path: "#{domain_path}",
                 query_contract_url: "#{query_contract_url}",
                 query_guide_url: "#{query_guide_url}"
 
         forward "#{query_intent_validation_url}",
                 SelectoComponents.QueryContract.IntentValidator.Plug,
-                domain: #{domain_module}.domain(),
-                domain_id: "#{domain_id}",
+                registry: #{domain_registry},
+                domain_id: #{domain_id},
                 domain_path: "#{domain_path}",
                 query_contract_url: "#{query_contract_url}",
                 query_guide_url: "#{query_guide_url}"

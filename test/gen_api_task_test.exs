@@ -49,10 +49,14 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
       assert api_module =~ "alias SelectoUpdato.DomainContract"
       assert api_module =~ "read_adapter: SelectoDBPostgreSQL.Adapter"
 
-      assert api_module =~
-               "Selecto.configure(config.read_connection, adapter: config.read_adapter)"
+      assert api_module =~ "domain_registry: Shop.SelectoDomains.OrderDomain"
+      assert api_module =~ "domain_id: Shop.SelectoDomains.OrderDomain.domain_id()"
+      assert api_module =~ "Selecto.configure_registered(config.domain_id, config.read_connection"
+      assert api_module =~ "registry: config.domain_registry"
+      refute api_module =~ "config.domain_module.domain()"
 
       assert api_module =~ "def choice_source_domain(config"
+      assert api_module =~ "Selecto.Domain.Ref.new(config.domain_id, config.domain_registry)"
       assert api_module =~ "def write_contract(config \\\\ @default_config, opts \\\\ [])"
       assert api_module =~ "def write_contract_summary(config \\\\ @default_config)"
       assert api_module =~ "def validate_intent(params, config \\\\ @default_config)"
