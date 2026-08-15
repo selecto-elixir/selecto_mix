@@ -490,7 +490,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
     domain_file = DomainPaths.domain_file_path(output_dir, source)
     opts_list = Map.to_list(opts)
 
-    case SelectoMix.SchemaIntrospector.introspect_schema_result(source, opts_list) do
+    case SelectoMix.Introspector.domain_config(source, opts_list) do
       {:error, reason} ->
         Igniter.add_issue(
           igniter,
@@ -530,7 +530,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
   end
 
   defp generate_domain_file(igniter, source, domain_config, file_path, opts) do
-    # Convert map opts to keyword list for SchemaIntrospector
+    # Convert map opts to the keyword list consumed by the introspector.
     opts_list = Map.to_list(opts)
 
     # Expand associated schemas if requested
@@ -718,7 +718,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
             if related_schema && Code.ensure_loaded?(related_schema) do
               # Introspect the related schema
-              case SelectoMix.SchemaIntrospector.introspect_schema_result(related_schema, []) do
+              case SelectoMix.Introspector.domain_config(related_schema, []) do
                 {:ok, related_config} ->
                   # Build expanded schema config
                   # We don't include associations in expanded schemas to avoid complexity
@@ -943,7 +943,7 @@ defmodule Mix.Tasks.Selecto.Gen.Domain do
 
   defp domain_module_for_source(igniter, source, opts) do
     app_name = Igniter.Project.Application.app_name(igniter) |> to_string() |> Macro.camelize()
-    domain_config = SelectoMix.SchemaIntrospector.introspect_schema!(source, Map.to_list(opts))
+    domain_config = SelectoMix.Introspector.domain_config!(source, Map.to_list(opts))
 
     SelectoMix.DomainGenerator.domain_module_name(source, domain_config, app_name: app_name)
   end

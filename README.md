@@ -234,7 +234,6 @@ That keeps generated structure and user-authored behavior separate.
 - `mix selecto.gen.exported_views`
 - `mix selecto.gen.filter_sets`
 - `mix selecto.gen.live_dashboard`
-- `mix selecto.add_timeouts`
 - `mix selecto.validate.parameterized_joins`
 - `mix selecto.domain.export`
 - `mix selecto.domain.check`

@@ -29,7 +29,6 @@ defmodule Mix.Tasks.Selecto.Gen.ParameterizedJoin do
 
     * `--fields` - Comma-separated list of fields available from this join (field:type format)
     * `--condition` - SQL join condition template with parameter placeholders
-    * `--source-table` - Deprecated; existing joins already define their source
     * `--output` - Output file path (defaults to stdout)
 
   ## Generated Configuration
@@ -81,7 +80,6 @@ defmodule Mix.Tasks.Selecto.Gen.ParameterizedJoin do
         strict: [
           fields: :string,
           condition: :string,
-          source_table: :string,
           output: :string
         ]
       )

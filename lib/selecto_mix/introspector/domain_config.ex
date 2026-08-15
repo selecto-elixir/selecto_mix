@@ -1,79 +1,12 @@
-defmodule SelectoMix.SchemaIntrospector do
-  @moduledoc """
-  Unified interface for introspecting schemas from any source.
+defmodule SelectoMix.Introspector.DomainConfig do
+  @moduledoc false
 
-  Supports both Ecto schemas and direct database connections via explicit
-  Selecto database adapters.
-  This module provides backward compatibility with the original Ecto-only
-  interface while delegating to `SelectoMix.Introspector` (and its backends,
-  e.g. `SelectoMix.Introspector.Ecto`) under the hood.
-
-  ## Usage
-
-      # Ecto schema (original interface - still works)
-      config = SelectoMix.SchemaIntrospector.introspect_schema(MyApp.User)
-
-      # Direct database connection
-      config = SelectoMix.SchemaIntrospector.introspect_schema(
-        {:db, SelectoDBPostgreSQL.Adapter, conn, "users"}
-      )
-  """
-
-  @doc """
-  Introspect a schema source and return Selecto domain configuration data.
-
-  Accepts either an Ecto schema module or an explicit adapter source tuple.
-
-  ## Parameters
-
-  - `source` - Either:
-    - Ecto schema module (e.g., `MyApp.User`)
-    - `{:db, adapter, connection, table_name}` tuple
-    - `{:db, adapter, connection, table_name, opts}` tuple
-
-  ## Options
-
-    * `:include_associations` - Include schema associations as joins (default: true)
-    * `:redact_fields` - List of field names to mark as redacted
-    * `:default_limit` - Default limit for queries (default: 50)
-    * `:include_timestamps` - Include timestamp fields in default selects (default: false)
-
-  ## Returns
-
-  A configuration map containing:
-    - `:schema_module` - The source module or table name
-    - `:table_name` - Database table name
-    - `:primary_key` - Primary key field name
-    - `:fields` - List of all available fields
-    - `:field_types` - Map of field names to their Selecto types
-    - `:associations` - Association metadata for joins
-    - `:suggested_defaults` - Recommended default configuration
-    - `:redacted_fields` - Fields that should be excluded from queries
-  On failure, the map contains `:error` and `:schema_module`, matching the
-  original public API. Use `introspect_schema_result/2` when tagged tuples are
-  preferable.
-  """
-  @spec introspect_schema(term(), keyword()) :: map()
-  def introspect_schema(source, opts \\ []) do
-    case introspect_schema_result(source, opts) do
-      {:ok, config} -> config
-      {:error, reason} -> %{error: reason, schema_module: source}
-    end
-  end
-
-  @doc """
-  Introspects a schema while preserving success and failure as tagged tuples.
-
-  Use this at task boundaries that need to stop generation on an introspection
-  failure. `introspect_schema/2` retains the package's original map-returning
-  API for backward compatibility.
-  """
-  @spec introspect_schema_result(term(), keyword()) :: {:ok, map()} | {:error, String.t()}
-  def introspect_schema_result(source, opts \\ []) do
+  @doc false
+  @spec build(term(), keyword()) :: {:ok, map()} | {:error, String.t()}
+  def build(source, opts \\ []) do
     include_associations = Keyword.get(opts, :include_associations, true)
     redact_fields = Keyword.get(opts, :redact_fields, [])
 
-    # Use new introspector protocol
     case SelectoMix.Introspector.introspect(source, opts) do
       {:ok, metadata} ->
         # Filter associations if not requested
@@ -114,74 +47,13 @@ defmodule SelectoMix.SchemaIntrospector do
     end
   end
 
-  @doc """
-  Same as `introspect_schema/2`, but raises `Mix.Error` on failure and
-  returns the config map directly. Intended for use at Mix task boundaries.
-  """
-  @spec introspect_schema!(term(), keyword()) :: map()
-  def introspect_schema!(source, opts \\ []) do
-    case introspect_schema_result(source, opts) do
+  @doc false
+  @spec build!(term(), keyword()) :: map()
+  def build!(source, opts \\ []) do
+    case build(source, opts) do
       {:ok, config} -> config
       {:error, reason} -> Mix.raise(to_string(reason))
     end
-  end
-
-  @doc """
-  Get the database table name for an Ecto schema.
-
-  Delegates to `SelectoMix.Introspector.Ecto.get_table_name/1`.
-  """
-  def get_table_name(schema_module) do
-    SelectoMix.Introspector.Ecto.get_table_name(schema_module)
-  end
-
-  @doc """
-  Get the primary key field(s) for an Ecto schema.
-
-  Delegates to `SelectoMix.Introspector.Ecto.get_primary_key/1`, which
-  returns the full list of keys for composite primary keys and `nil` when
-  the schema has none (rather than collapsing to a single field or `:id`).
-  """
-  def get_primary_key(schema_module) do
-    SelectoMix.Introspector.Ecto.get_primary_key(schema_module)
-  end
-
-  @doc """
-  Get all fields defined in an Ecto schema.
-
-  Delegates to `SelectoMix.Introspector.Ecto.get_schema_fields/1`.
-  """
-  def get_schema_fields(schema_module) do
-    SelectoMix.Introspector.Ecto.get_schema_fields(schema_module)
-  end
-
-  @doc """
-  Map Ecto field types to Selecto types.
-
-  Delegates to `SelectoMix.Introspector.Ecto.get_field_types/1`.
-  """
-  def get_field_types(schema_module) do
-    SelectoMix.Introspector.Ecto.get_field_types(schema_module)
-  end
-
-  @doc """
-  Extract association information for join configuration.
-
-  Delegates to `SelectoMix.Introspector.Ecto.get_associations/2`, which
-  additionally covers `:many_to_many` associations (with `join_through` /
-  `join_keys`) that this module's earlier standalone implementation did not.
-  """
-  def get_associations(schema_module, opts \\ []) do
-    SelectoMix.Introspector.Ecto.get_associations(schema_module, opts)
-  end
-
-  @doc """
-  Generate suggested default configuration based on schema analysis.
-  """
-  def generate_suggested_defaults(schema_module, opts) do
-    fields = get_schema_fields(schema_module)
-    field_types = get_field_types(schema_module)
-    generate_suggested_defaults_from_metadata(fields, field_types, opts)
   end
 
   # Generate suggested defaults from field metadata (works with any source)
@@ -202,18 +74,6 @@ defmodule SelectoMix.SchemaIntrospector do
       default_filters: default_filters,
       default_order: default_order,
       default_limit: Keyword.get(opts, :default_limit, 50)
-    }
-  end
-
-  @doc """
-  Extract additional metadata about the schema.
-  """
-  def extract_metadata(schema_module) do
-    %{
-      module_name: get_module_name(schema_module),
-      context_name: get_context_name(schema_module),
-      has_timestamps: has_timestamps?(schema_module),
-      estimated_complexity: estimate_schema_complexity(schema_module)
     }
   end
 
@@ -409,26 +269,6 @@ defmodule SelectoMix.SchemaIntrospector do
     case parts do
       [_app, context | _] -> context
       _ -> "Unknown"
-    end
-  end
-
-  defp has_timestamps?(schema_module) do
-    fields = get_schema_fields(schema_module)
-
-    Enum.any?(fields, fn field ->
-      field_str = to_string(field)
-      String.contains?(field_str, ["inserted_at", "updated_at"])
-    end)
-  end
-
-  defp estimate_schema_complexity(schema_module) do
-    field_count = length(get_schema_fields(schema_module))
-    assoc_count = length(schema_module.__schema__(:associations))
-
-    cond do
-      field_count <= 5 and assoc_count <= 2 -> :simple
-      field_count <= 15 and assoc_count <= 5 -> :moderate
-      true -> :complex
     end
   end
 

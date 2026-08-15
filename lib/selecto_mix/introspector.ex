@@ -120,6 +120,26 @@ defmodule SelectoMix.Introspector do
     end
   end
 
+  @doc """
+  Introspects `source` and returns the enriched configuration consumed by
+  SelectoMix domain generators.
+
+  Unlike the removed `SelectoMix.SchemaIntrospector` compatibility API,
+  failures remain tagged and never masquerade as configuration maps.
+  """
+  @spec domain_config(source(), opts()) :: {:ok, map()} | {:error, String.t()}
+  def domain_config(source, opts \\ []) do
+    SelectoMix.Introspector.DomainConfig.build(source, opts)
+  end
+
+  @doc """
+  Same as `domain_config/2`, but raises `Mix.Error` at task boundaries.
+  """
+  @spec domain_config!(source(), opts()) :: map()
+  def domain_config!(source, opts \\ []) do
+    SelectoMix.Introspector.DomainConfig.build!(source, opts)
+  end
+
   defp introspect_db({:db, adapter, connection, table_name, source_opts}, opts) do
     with :ok <- ensure_adapter_ready(adapter),
          true <- function_exported?(adapter, :introspect_table, 3) do

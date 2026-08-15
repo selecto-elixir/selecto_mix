@@ -229,9 +229,9 @@ defmodule SelectoMixTest do
     AdapterResolver,
     ConnectionOpts,
     DomainGenerator,
+    Introspector,
     LiveViewGenerator,
     OverlayGenerator,
-    SchemaIntrospector,
     StudioArtifactsGenerator
   }
 
@@ -259,6 +259,11 @@ defmodule SelectoMixTest do
       assert is_list(schemas)
       assert Enum.all?(schemas, &is_atom/1)
     end
+
+    test "removed compatibility modules are not shipped" do
+      refute Code.ensure_loaded?(SelectoMix.SchemaIntrospector)
+      refute Code.ensure_loaded?(Mix.Tasks.Selecto.AddTimeouts)
+    end
   end
 
   describe "schema validation" do
@@ -268,14 +273,12 @@ defmodule SelectoMixTest do
     end
   end
 
-  describe "SchemaIntrospector" do
+  describe "Introspector domain configuration" do
     # These tests would require actual Ecto schemas to be meaningful
     # For demonstration purposes, showing the test structure
 
-    test "introspect_schema/2 handles missing schema gracefully" do
-      # This would fail with a real schema module, but shows error handling
-      assert %{error: reason, schema_module: NonExistentSchema} =
-               SchemaIntrospector.introspect_schema(NonExistentSchema, [])
+    test "domain_config/2 preserves introspection failures as tagged errors" do
+      assert {:error, reason} = Introspector.domain_config(NonExistentSchema, [])
 
       assert reason =~ "Failed to introspect schema"
     end
@@ -305,7 +308,7 @@ defmodule SelectoMixTest do
     end
 
     test "preserves binary_id and uuid column metadata" do
-      config = SchemaIntrospector.introspect_schema(UuidSchema, [])
+      assert {:ok, config} = Introspector.domain_config(UuidSchema, [])
 
       assert config.primary_key == :public_id
       assert config.field_types.public_id == :binary_id
@@ -841,11 +844,11 @@ defmodule SelectoMixTest do
       assert AdapterResolver.format_adapter_error(:some_other_reason) == ":some_other_reason"
     end
 
-    test "schema introspector and domain generator support mssql db sources" do
+    test "introspector and domain generator support mssql db sources" do
       source = {:db, SelectoDBMSSQL.Adapter, :fake_conn, "orders", schema: "sales"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema_result(source,
+        Introspector.domain_config(source,
           schema: "sales",
           include_associations: true
         )
@@ -865,11 +868,11 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "mix selecto.gen.domain --adapter mssql --table orders")
     end
 
-    test "schema introspector and domain generator support sqlite db sources" do
+    test "introspector and domain generator support sqlite db sources" do
       source = {:db, SelectoDBSQLite.Adapter, :fake_conn, "orders", schema: "public"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema_result(source,
+        Introspector.domain_config(source,
           schema: "public",
           include_associations: true
         )
@@ -887,11 +890,11 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "mix selecto.gen.domain --adapter sqlite --table orders")
     end
 
-    test "schema introspector and domain generator support mysql db sources" do
+    test "introspector and domain generator support mysql db sources" do
       source = {:db, SelectoDBMySQL.Adapter, :fake_conn, "orders", schema: "shop_dev"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema_result(source,
+        Introspector.domain_config(source,
           schema: "shop_dev",
           include_associations: true
         )
@@ -909,11 +912,11 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "mix selecto.gen.domain --adapter mysql --table orders")
     end
 
-    test "schema introspector and domain generator support mariadb db sources" do
+    test "introspector and domain generator support mariadb db sources" do
       source = {:db, SelectoDBMariaDB.Adapter, :fake_conn, "orders", schema: "shop_dev"}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema_result(source,
+        Introspector.domain_config(source,
           schema: "shop_dev",
           include_associations: true
         )
@@ -931,13 +934,13 @@ defmodule SelectoMixTest do
       assert String.contains?(result, "mix selecto.gen.domain --adapter mariadb --table orders")
     end
 
-    test "schema introspector preserves explicit view metadata for db sources" do
+    test "introspector preserves explicit view metadata for db sources" do
       source =
         {:db, SelectoDBMSSQL.Adapter, :fake_conn, "orders",
          schema: "reporting", source_kind: :view, primary_key: :customer_id}
 
       {:ok, config} =
-        SchemaIntrospector.introspect_schema_result(source,
+        Introspector.domain_config(source,
           schema: "reporting",
           source_kind: :view,
           primary_key: :customer_id,
@@ -1165,7 +1168,7 @@ defmodule SelectoMixTest do
       end
       """
 
-      # Compile for real so SchemaIntrospector can introspect fields once
+      # Compile for real so Introspector can inspect fields once
       # discovered, matching how a host app's own compiled schemas behave.
       Code.compile_string(post_source)
       Code.compile_string(comment_source)

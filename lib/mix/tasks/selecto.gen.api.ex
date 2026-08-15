@@ -19,7 +19,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     * `--domain` - Domain module used by generated API module (default: inferred)
     * `--adapter` - required Selecto read adapter module or known short name
     * `--connection` - named Selecto read connection (default: `MyApp.SelectoDatabase`)
-    * `--repo` - deprecated alias for `--connection`
     * `--api-path` - Route path used in controller docs (default: `/api/v1/updato/<name>`)
     * `--panel-path` - Route path used for the control panel (default: `/updato/<name>/control`)
     * `--panel-in-prod` - Include control panel route in production snippets (default: false)
@@ -63,7 +62,6 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
     domain: :string,
     adapter: :string,
     connection: :string,
-    repo: :string,
     api_path: :string,
     panel_path: :string,
     panel_in_prod: :boolean,
@@ -90,8 +88,7 @@ defmodule Mix.Tasks.Selecto.Gen.Api do
         name_snake: name_snake,
         domain_module: opts[:domain] || infer_domain_module(app_module, name_module),
         read_adapter_module: read_adapter_module!(opts[:adapter]),
-        read_connection_module:
-          opts[:connection] || opts[:repo] || app_module <> ".SelectoDatabase",
+        read_connection_module: opts[:connection] || app_module <> ".SelectoDatabase",
         api_path: opts[:api_path] || "/api/v1/updato/#{name_snake}",
         panel_path: opts[:panel_path] || "/updato/#{name_snake}/control",
         panel_in_prod?: !!opts[:panel_in_prod],

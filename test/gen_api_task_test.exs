@@ -17,6 +17,18 @@ defmodule Mix.Tasks.Selecto.Gen.ApiTest do
     end)
   end
 
+  test "rejects the removed --repo compatibility option" do
+    assert_raise Mix.Error, ~r/Invalid option.*repo/, fn ->
+      Mix.Tasks.Selecto.Gen.Api.run([
+        "orders",
+        "--adapter",
+        "postgresql",
+        "--repo",
+        "Shop.Repo"
+      ])
+    end
+  end
+
   test "generated API surfaces the domain-authored Updato write contract" do
     in_tmp_dir("selecto_mix_gen_api_contract", fn ->
       Mix.Task.reenable("selecto.gen.api")

@@ -202,6 +202,17 @@ defmodule Mix.Tasks.Selecto.Validate.ParameterizedJoinsTest do
     refute output =~ "freight_band"
   end
 
+  test "parameterized join generator rejects the removed --source-table option" do
+    assert_raise Mix.Error, ~r/Invalid option.*source-table/, fn ->
+      Mix.Tasks.Selecto.Gen.ParameterizedJoin.run([
+        "customer",
+        "country:string",
+        "--source-table",
+        "customers"
+      ])
+    end
+  end
+
   test "parameterized join generator reports an error for an invalid parameter spec" do
     output =
       capture_io(:stderr, fn ->

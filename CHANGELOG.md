@@ -1,6 +1,15 @@
 CHANGES
 =======
 
+Unreleased
+----------
+
+- Removed the nonfunctional `mix selecto.add_timeouts` generator.
+- Removed the `SelectoMix.SchemaIntrospector` compatibility API; generators now
+  consume tagged `SelectoMix.Introspector.domain_config/2` results.
+- Removed the deprecated `selecto.gen.api --repo` alias and the ignored
+  `selecto.gen.parameterized_join --source-table` option.
+
 V 0.5.0
 ----------
 
