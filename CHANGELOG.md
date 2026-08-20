@@ -1,7 +1,7 @@
 CHANGES
 =======
 
-Unreleased
+V 0.5.0
 ----------
 
 - Removed the nonfunctional `mix selecto.add_timeouts` generator.
@@ -9,9 +9,6 @@ Unreleased
   consume tagged `SelectoMix.Introspector.domain_config/2` results.
 - Removed the deprecated `selecto.gen.api --repo` alias and the ignored
   `selecto.gen.parameterized_join --source-table` option.
-
-V 0.5.0
-----------
 
 - Updated generated dependency baselines to Selecto, PostgreSQL adapter, and
   Components `0.5.0` for the explicit adapter/runtime boundary.
@@ -26,6 +23,13 @@ V 0.5.0
 - Removed the package's direct Postgrex dependency and duplicate PostgreSQL
   catalog introspector. Direct database generation now always uses the selected
   adapter's `introspect_table/3` contract.
+- Generated and imported domain modules now implement named domain registries;
+  generated LiveViews, query-contract routes, and API reads use opaque domain
+  references with `Selecto.configure_registered/3` instead of passing authored
+  maps across request boundaries.
+- Generated domains now include a stable `functions: %{}` home with an editable
+  connected-verification metadata draft and strict verification guidance,
+  without inventing a database function declaration.
 - Ecto maps and generated overlays now use the portable `:json` type and
   `defjson_schema` DSL instead of PostgreSQL-specific JSONB names.
 - Added the repository's declared MIT license artifact to release packages.
